@@ -3,6 +3,7 @@ package recon
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
@@ -81,6 +82,13 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 
 	workersCount := min(cfg.MaxWorkers, len(targets))
+
+	// Shuffle targets to distribute them evenly across workers
+	logging.Logger().Info("shuffling targets to ensure even distribution across workers")
+	rand.Shuffle(len(targets), func(i, j int) {
+		targets[i], targets[j] = targets[j], targets[i]
+	})
+
 	pool := pond.NewPool(workersCount)
 
 	for c := range slices.Chunk(targets, (len(targets)+workersCount-1)/workersCount) {

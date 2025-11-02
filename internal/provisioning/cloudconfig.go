@@ -25,7 +25,7 @@ type CloudConfigData struct {
 func GenerateCloudConfig(username, publicKey string) (string, error) {
 	tmpl, err := template.New("cloud-config").Parse(cloudConfigTemplate)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse cloud-config template: %v", err)
+		return "", fmt.Errorf("failed to parse cloud-config template: %w", err)
 	}
 
 	data := CloudConfigData{
@@ -35,7 +35,7 @@ func GenerateCloudConfig(username, publicKey string) (string, error) {
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute cloud-config template: %v", err)
+		return "", fmt.Errorf("failed to execute cloud-config template: %w", err)
 	}
 
 	return buf.String(), nil

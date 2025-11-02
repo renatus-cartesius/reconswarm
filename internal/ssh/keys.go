@@ -23,7 +23,7 @@ type KeyPair struct {
 func GetOrGenerateKeyPair(keyDir string) (*KeyPair, error) {
 	// Create key directory if it doesn't exist
 	if err := os.MkdirAll(keyDir, 0700); err != nil {
-		return nil, fmt.Errorf("failed to create key directory: %v", err)
+		return nil, fmt.Errorf("failed to create key directory: %w", err)
 	}
 
 	privateKeyPath := filepath.Join(keyDir, "reconswarm_key")
@@ -36,7 +36,7 @@ func GetOrGenerateKeyPair(keyDir string) (*KeyPair, error) {
 			// Both keys exist, read the public key
 			publicKeyBytes, err := os.ReadFile(publicKeyPath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read existing public key: %v", err)
+				return nil, fmt.Errorf("failed to read existing public key: %w", err)
 			}
 
 			return &KeyPair{
@@ -58,13 +58,13 @@ func generateNewKeyPair(privateKeyPath, publicKeyPath string) (*KeyPair, error) 
 	// Generate private key
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate private key: %v", err)
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	// Create private key file
 	privateKeyFile, err := os.Create(privateKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create private key file: %v", err)
+		return nil, fmt.Errorf("failed to create private key file: %w", err)
 	}
 	defer privateKeyFile.Close()
 
@@ -75,36 +75,36 @@ func generateNewKeyPair(privateKeyPath, publicKeyPath string) (*KeyPair, error) 
 	}
 
 	if err := pem.Encode(privateKeyFile, privateKeyPEM); err != nil {
-		return nil, fmt.Errorf("failed to encode private key: %v", err)
+		return nil, fmt.Errorf("failed to encode private key: %w", err)
 	}
 
 	// Set proper permissions for private key
 	if err := os.Chmod(privateKeyPath, 0600); err != nil {
-		return nil, fmt.Errorf("failed to set private key permissions: %v", err)
+		return nil, fmt.Errorf("failed to set private key permissions: %w", err)
 	}
 
 	// Generate public key
 	publicKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate public key: %v", err)
+		return nil, fmt.Errorf("failed to generate public key: %w", err)
 	}
 
 	// Create public key file
 	publicKeyFile, err := os.Create(publicKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create public key file: %v", err)
+		return nil, fmt.Errorf("failed to create public key file: %w", err)
 	}
 	defer publicKeyFile.Close()
 
 	// Write public key in OpenSSH format
 	publicKeyString := string(ssh.MarshalAuthorizedKey(publicKey))
 	if _, err := publicKeyFile.WriteString(publicKeyString); err != nil {
-		return nil, fmt.Errorf("failed to write public key: %v", err)
+		return nil, fmt.Errorf("failed to write public key: %w", err)
 	}
 
 	// Set proper permissions for public key
 	if err := os.Chmod(publicKeyPath, 0644); err != nil {
-		return nil, fmt.Errorf("failed to set public key permissions: %v", err)
+		return nil, fmt.Errorf("failed to set public key permissions: %w", err)
 	}
 
 	return &KeyPair{
@@ -119,7 +119,7 @@ func generatePublicKeyFromPrivate(privateKeyPath, publicKeyPath string) (*KeyPai
 	// Read private key
 	privateKeyBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read private key: %v", err)
+		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
 
 	// Parse private key
@@ -130,31 +130,31 @@ func generatePublicKeyFromPrivate(privateKeyPath, publicKeyPath string) (*KeyPai
 
 	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %v", err)
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	// Generate public key
 	publicKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate public key: %v", err)
+		return nil, fmt.Errorf("failed to generate public key: %w", err)
 	}
 
 	// Create public key file
 	publicKeyFile, err := os.Create(publicKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create public key file: %v", err)
+		return nil, fmt.Errorf("failed to create public key file: %w", err)
 	}
 	defer publicKeyFile.Close()
 
 	// Write public key in OpenSSH format
 	publicKeyString := string(ssh.MarshalAuthorizedKey(publicKey))
 	if _, err := publicKeyFile.WriteString(publicKeyString); err != nil {
-		return nil, fmt.Errorf("failed to write public key: %v", err)
+		return nil, fmt.Errorf("failed to write public key: %w", err)
 	}
 
 	// Set proper permissions for public key
 	if err := os.Chmod(publicKeyPath, 0644); err != nil {
-		return nil, fmt.Errorf("failed to set public key permissions: %v", err)
+		return nil, fmt.Errorf("failed to set public key permissions: %w", err)
 	}
 
 	return &KeyPair{
@@ -167,10 +167,10 @@ func generatePublicKeyFromPrivate(privateKeyPath, publicKeyPath string) (*KeyPai
 // Cleanup removes the generated key files
 func (kp *KeyPair) Cleanup() error {
 	if err := os.Remove(kp.PrivateKeyPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove private key: %v", err)
+		return fmt.Errorf("failed to remove private key: %w", err)
 	}
 	if err := os.Remove(kp.PublicKeyPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove public key: %v", err)
+		return fmt.Errorf("failed to remove public key: %w", err)
 	}
 	return nil
 }

@@ -141,7 +141,13 @@ func Run(ctx context.Context, cfg config.Config) error {
 				logging.Logger().Error("failed to create controller", zap.Error(err))
 				return
 			}
-			defer controller.Close()
+			defer func() {
+				if err := controller.Close(); err != nil {
+					logging.Logger().Warn("failed to close controller",
+						zap.String("instance", instance.Name),
+						zap.Error(err))
+				}
+			}()
 
 			defer func() {
 				// Delete VM
@@ -192,7 +198,7 @@ func runStages(controller control.Controller, cfg config.Config, targets []strin
 	// Ensure /opt/recon directory exists
 	logging.Logger().Debug("ensuring /opt/recon directory exists")
 	if err := controller.Run("sudo mkdir -p /opt/recon"); err != nil {
-		return fmt.Errorf("failed to create /opt/recon directory: %v", err)
+		return fmt.Errorf("failed to create /opt/recon directory: %w", err)
 	}
 
 	// Create targets file with timestamp
@@ -207,7 +213,7 @@ func runStages(controller control.Controller, cfg config.Config, targets []strin
 	// Write targets to file using echo command
 	writeCmd := fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", targetsContent, targetsFile)
 	if err := controller.Run(writeCmd); err != nil {
-		return fmt.Errorf("failed to write targets file: %v", err)
+		return fmt.Errorf("failed to write targets file: %w", err)
 	}
 
 	// Execute each stage sequentially
@@ -219,7 +225,7 @@ func runStages(controller control.Controller, cfg config.Config, targets []strin
 
 		// Execute the stage using the interface
 		if err := stage.Execute(controller, targets, targetsFile); err != nil {
-			return fmt.Errorf("failed to execute stage '%s': %v", stage.GetName(), err)
+			return fmt.Errorf("failed to execute stage '%s': %w", stage.GetName(), err)
 		}
 
 		logging.Logger().Info("stage completed successfully", zap.String("stage_name", stage.GetName()))

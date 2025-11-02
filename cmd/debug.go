@@ -113,7 +113,13 @@ This is useful for testing the provisioning and automation functionality.`,
 			if err != nil {
 				logging.Logger().Warn("Failed to create controller", zap.Error(err))
 			} else {
-				defer controller.Close()
+				defer func() {
+					if err := controller.Close(); err != nil {
+						logging.Logger().Warn("failed to close controller",
+							zap.String("instance", instance.IP),
+							zap.Error(err))
+					}
+				}()
 
 				// Run setup commands from configuration
 				logging.Logger().Info("Starting VM setup",

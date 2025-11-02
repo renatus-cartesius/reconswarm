@@ -96,7 +96,7 @@ func CrtshDump(domain string) ([]string, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		logging.Logger().Error("Failed to create HTTP request", zap.Error(err))
-		return nil, fmt.Errorf("failed to create HTTP request: %v", err)
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	// Add User-Agent header
@@ -106,7 +106,7 @@ func CrtshDump(domain string) ([]string, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		logging.Logger().Error("Failed to fetch data from crt.sh", zap.Error(err))
-		return nil, fmt.Errorf("failed to fetch data from crt.sh: %v", err)
+		return nil, fmt.Errorf("failed to fetch data from crt.sh: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -124,7 +124,7 @@ func CrtshDump(domain string) ([]string, error) {
 	var results []CrtshResult
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
 		logging.Logger().Error("Failed to parse JSON response", zap.Error(err))
-		return nil, fmt.Errorf("failed to parse JSON response: %v", err)
+		return nil, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
 	logging.Logger().Debug("Parsed crt.sh response",

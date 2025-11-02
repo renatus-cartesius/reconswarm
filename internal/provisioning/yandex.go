@@ -25,7 +25,7 @@ func NewYcProvisioner(iamToken, folderID string) (*YcProvisioner, error) {
 		Credentials: ycsdk.NewIAMTokenCredentials(iamToken),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SDK: %v", err)
+		return nil, fmt.Errorf("failed to create SDK: %w", err)
 	}
 
 	return &YcProvisioner{
@@ -88,24 +88,24 @@ func (p *YcProvisioner) Create(ctx context.Context, spec InstanceSpec) (*Instanc
 	// Create VM
 	pop, err := p.sdk.Compute().Instance().Create(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create VM: %v", err)
+		return nil, fmt.Errorf("failed to create VM: %w", err)
 	}
 
 	// Wait for operation completion
 	op, err := p.sdk.WrapOperation(pop, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to wrap operation: %v", err)
+		return nil, fmt.Errorf("failed to wrap operation: %w", err)
 	}
 
 	err = op.Wait(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to wait for operation: %v", err)
+		return nil, fmt.Errorf("failed to wait for operation: %w", err)
 	}
 
 	// Get result
 	resp, err := op.Response()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get response: %v", err)
+		return nil, fmt.Errorf("failed to get response: %w", err)
 	}
 
 	instance := resp.(*compute.Instance)
@@ -133,18 +133,18 @@ func (p *YcProvisioner) Delete(ctx context.Context, instanceID string) error {
 		InstanceId: instanceID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to delete VM: %v", err)
+		return fmt.Errorf("failed to delete VM: %w", err)
 	}
 
 	// Wait for operation completion
 	op, err := p.sdk.WrapOperation(pop, nil)
 	if err != nil {
-		return fmt.Errorf("failed to wrap operation: %v", err)
+		return fmt.Errorf("failed to wrap operation: %w", err)
 	}
 
 	err = op.Wait(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to wait for operation: %v", err)
+		return fmt.Errorf("failed to wait for operation: %w", err)
 	}
 
 	return nil

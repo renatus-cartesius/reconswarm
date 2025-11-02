@@ -31,6 +31,15 @@ func escapeNewlines(s string) string {
 	return strings.ReplaceAll(s, "\n", "\\n")
 }
 
+// safeClose safely closes a resource and logs any errors
+func safeClose(name string, closer func() error) {
+	if err := closer(); err != nil {
+		logging.Logger().Warn("failed to close resource",
+			zap.String("resource", name),
+			zap.Error(err))
+	}
+}
+
 // SSHConfig holds configuration for SSH connection
 type SSHConfig struct {
 	Host         string
@@ -46,13 +55,13 @@ func NewSSH(config SSHConfig) (*SSH, error) {
 	// Wait for SSH port to become available
 	err := waitForSSH(config.Host, config.Timeout)
 	if err != nil {
-		return nil, fmt.Errorf("SSH not available after timeout: %v", err)
+		return nil, fmt.Errorf("SSH not available after timeout: %w", err)
 	}
 
 	// Load private key
 	signer, err := loadPrivateKey(config.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load private key: %v", err)
+		return nil, fmt.Errorf("failed to load private key: %w", err)
 	}
 
 	// Create SSH client
@@ -67,7 +76,7 @@ func NewSSH(config SSHConfig) (*SSH, error) {
 
 	client, err := ssh.Dial("tcp", net.JoinHostPort(config.Host, "22"), clientConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial SSH: %v", err)
+		return nil, fmt.Errorf("failed to dial SSH: %w", err)
 	}
 
 	logging.Logger().Info("SSH connection established",
@@ -102,9 +111,9 @@ func (s *SSH) GetInstanceName() string {
 func (s *SSH) Run(command string) error {
 	session, err := s.client.NewSession()
 	if err != nil {
-		return fmt.Errorf("failed to create session: %v", err)
+		return fmt.Errorf("failed to create session: %w", err)
 	}
-	defer session.Close()
+	defer safeClose("SSH session", session.Close)
 
 	// Create buffers to capture output
 	var stdout, stderr bytes.Buffer
@@ -140,13 +149,20 @@ func (s *SSH) WriteFile(remotePath, content string, mode os.FileMode) error {
 	// Create a temporary file locally
 	tempFile, err := os.CreateTemp("", "ssh_write_*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %v", err)
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tempFile.Name())
+	tempFileName := tempFile.Name()
+	defer func() {
+		if err := os.Remove(tempFileName); err != nil {
+			logging.Logger().Warn("failed to remove temp file",
+				zap.String("file", tempFileName),
+				zap.Error(err))
+		}
+	}()
 
 	// Write content to temp file
-	if err := os.WriteFile(tempFile.Name(), []byte(content), mode); err != nil {
-		return fmt.Errorf("failed to write to temp file: %v", err)
+	if err := os.WriteFile(tempFileName, []byte(content), mode); err != nil {
+		return fmt.Errorf("failed to write to temp file: %w", err)
 	}
 
 	// Write file using echo and redirection
@@ -158,9 +174,9 @@ func (s *SSH) WriteFile(remotePath, content string, mode os.FileMode) error {
 func (s *SSH) ReadFile(remotePath string) (string, error) {
 	session, err := s.client.NewSession()
 	if err != nil {
-		return "", fmt.Errorf("failed to create session: %v", err)
+		return "", fmt.Errorf("failed to create session: %w", err)
 	}
-	defer session.Close()
+	defer safeClose("SSH session", session.Close)
 
 	logging.Logger().Debug("Reading file",
 		zap.String("path", remotePath),
@@ -191,34 +207,34 @@ func (s *SSH) SyncFile(remotePath, localPath string) error {
 	// Create SFTP client
 	sftpClient, err := sftp.NewClient(s.client)
 	if err != nil {
-		return fmt.Errorf("failed to create SFTP client: %v", err)
+		return fmt.Errorf("failed to create SFTP client: %w", err)
 	}
-	defer sftpClient.Close()
+	defer safeClose("SFTP client", sftpClient.Close)
 
 	// Create local directory if it doesn't exist
 	localDir := filepath.Dir(localPath)
 	if err := os.MkdirAll(localDir, 0755); err != nil {
-		return fmt.Errorf("failed to create local directory: %v", err)
+		return fmt.Errorf("failed to create local directory: %w", err)
 	}
 
 	// Open remote file
 	remoteFile, err := sftpClient.Open(remotePath)
 	if err != nil {
-		return fmt.Errorf("failed to open remote file: %v", err)
+		return fmt.Errorf("failed to open remote file: %w", err)
 	}
-	defer remoteFile.Close()
+	defer safeClose("remote file", remoteFile.Close)
 
 	// Create local file
 	localFile, err := os.Create(localPath)
 	if err != nil {
-		return fmt.Errorf("failed to create local file: %v", err)
+		return fmt.Errorf("failed to create local file: %w", err)
 	}
-	defer localFile.Close()
+	defer safeClose("local file", localFile.Close)
 
 	// Copy file content
 	bytesWritten, err := localFile.ReadFrom(remoteFile)
 	if err != nil {
-		return fmt.Errorf("failed to copy file content: %v", err)
+		return fmt.Errorf("failed to copy file content: %w", err)
 	}
 
 	logging.Logger().Info("File synced successfully using SFTP",
@@ -238,7 +254,11 @@ func waitForSSH(host string, timeout time.Duration) error {
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, "22"), 5*time.Second)
 		if err == nil {
-			conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				logging.Logger().Debug("failed to close connection test",
+					zap.String("host", host),
+					zap.Error(closeErr))
+			}
 			return nil
 		}
 
@@ -253,12 +273,12 @@ func waitForSSH(host string, timeout time.Duration) error {
 func loadPrivateKey(privateKeyPath string) (ssh.Signer, error) {
 	keyBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read private key: %v", err)
+		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
 
 	signer, err := ssh.ParsePrivateKey(keyBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %v", err)
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	return signer, nil

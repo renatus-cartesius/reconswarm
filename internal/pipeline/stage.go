@@ -82,14 +82,14 @@ func (e *ExecStage) Execute(controller interface{}, targets []string, targetsFil
 		// Render template
 		renderedCommand, err := renderTemplate(stepTemplate, templateContext)
 		if err != nil {
-			return fmt.Errorf("failed to render template for step %d: %v", stepIndex+1, err)
+			return fmt.Errorf("failed to render template for step %d: %w", stepIndex+1, err)
 		}
 
 		logging.Logger().Debug("rendered command", zap.String("command", renderedCommand))
 
 		// Execute the rendered command
 		if err := ctrl.Run(renderedCommand); err != nil {
-			return fmt.Errorf("failed to execute step %d: %v", stepIndex+1, err)
+			return fmt.Errorf("failed to execute step %d: %w", stepIndex+1, err)
 		}
 
 		logging.Logger().Debug("step completed successfully", zap.Int("step_index", stepIndex+1))
@@ -121,13 +121,13 @@ func (s *SyncStage) Execute(controller interface{}, targets []string, targetsFil
 	// Render source path template
 	renderedSrc, err := renderTemplate(s.Src, templateContext)
 	if err != nil {
-		return fmt.Errorf("failed to render source path template: %v", err)
+		return fmt.Errorf("failed to render source path template: %w", err)
 	}
 
 	// Render destination path template
 	renderedDest, err := renderTemplate(s.Dest, templateContext)
 	if err != nil {
-		return fmt.Errorf("failed to render destination path template: %v", err)
+		return fmt.Errorf("failed to render destination path template: %w", err)
 	}
 
 	logging.Logger().Debug("rendered sync paths",
@@ -136,7 +136,7 @@ func (s *SyncStage) Execute(controller interface{}, targets []string, targetsFil
 
 	// Execute the file sync using SFTP
 	if err := ctrl.SyncFile(renderedSrc, renderedDest); err != nil {
-		return fmt.Errorf("failed to sync file: %v", err)
+		return fmt.Errorf("failed to sync file: %w", err)
 	}
 
 	logging.Logger().Debug("sync stage completed successfully", zap.String("stage_name", s.Name))
@@ -147,12 +147,12 @@ func (s *SyncStage) Execute(controller interface{}, targets []string, targetsFil
 func renderTemplate(templateStr string, context map[string]interface{}) (string, error) {
 	tmpl, err := template.New("command").Parse(templateStr)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %v", err)
+		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, context); err != nil {
-		return "", fmt.Errorf("failed to execute template: %v", err)
+		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
 	return buf.String(), nil
@@ -162,12 +162,12 @@ func renderTemplate(templateStr string, context map[string]interface{}) (string,
 func RenderTemplate(templateStr string, context map[string]interface{}) (string, error) {
 	tmpl, err := template.New("command").Parse(templateStr)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %v", err)
+		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, context); err != nil {
-		return "", fmt.Errorf("failed to execute template: %v", err)
+		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
 	return buf.String(), nil

@@ -6,6 +6,8 @@ package main
 import (
 	"reconswarm/cmd"
 	"reconswarm/internal/logging"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -13,7 +15,12 @@ func main() {
 	if err := logging.InitLogger(); err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
-	defer logging.Sync()
+	defer func() {
+		if err := logging.Sync(); err != nil {
+			// Log sync error, but don't fail the application
+			logging.Logger().Error("failed to sync logger on exit", zap.Error(err))
+		}
+	}()
 
 	cmd.Execute()
 }

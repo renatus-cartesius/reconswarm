@@ -51,14 +51,29 @@ func InitLogger() error {
 func Logger() *zap.Logger {
 	if defaultLogger == nil {
 		// Fallback to basic logger if not initialized
-		defaultLogger, _ = zap.NewProduction()
+		logger, err := zap.NewProduction()
+		if err != nil {
+			// If production logger fails, try development logger as last resort
+			logger, err = zap.NewDevelopment()
+			if err != nil {
+				// If all else fails, use Nop logger to prevent nil pointer
+				logger = zap.NewNop()
+			}
+		}
+		defaultLogger = logger
 	}
 	return defaultLogger
 }
 
 // Sync flushes any buffered log entries
-func Sync() {
+func Sync() error {
 	if defaultLogger != nil {
-		defaultLogger.Sync()
+		if err := defaultLogger.Sync(); err != nil {
+			// Sync errors are often safe to ignore (e.g., /dev/stderr on Linux)
+			// but we log them for debugging
+			defaultLogger.Error("failed to sync logger", zap.Error(err))
+			return err
+		}
 	}
+	return nil
 }

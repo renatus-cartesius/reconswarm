@@ -15,19 +15,42 @@ func TestLoadConfigValidation(t *testing.T) {
 
 	// Backup original config if it exists
 	backupPath := configPath + ".backup"
+	var originalData []byte
 	if _, err := os.Stat(configPath); err == nil {
-		data, _ := os.ReadFile(configPath)
-		os.WriteFile(backupPath, data, 0644)
-		defer os.Remove(backupPath)
-		defer os.WriteFile(configPath, data, 0644)
+		var err error
+		originalData, err = os.ReadFile(configPath)
+		if err != nil {
+			t.Fatalf("failed to read original config file: %v", err)
+		}
+		
+		if err := os.WriteFile(backupPath, originalData, 0644); err != nil {
+			t.Fatalf("failed to create backup config file: %v", err)
+		}
+		defer func() {
+			if err := os.Remove(backupPath); err != nil {
+				t.Errorf("failed to remove backup file: %v", err)
+			}
+		}()
+		
+		defer func() {
+			if err := os.WriteFile(configPath, originalData, 0644); err != nil {
+				t.Errorf("failed to restore original config file: %v", err)
+			}
+		}()
 	}
 
 	// Create a temporary config file with missing required fields
 	tempConfig := `default_zone: "ru-central1-b"
 default_username: "reconswarm"
 `
-	os.WriteFile(configPath, []byte(tempConfig), 0644)
-	defer os.Remove(configPath)
+	if err := os.WriteFile(configPath, []byte(tempConfig), 0644); err != nil {
+		t.Fatalf("failed to write temporary config file: %v", err)
+	}
+	defer func() {
+		if err := os.Remove(configPath); err != nil {
+			t.Errorf("failed to remove temporary config file: %v", err)
+		}
+	}()
 
 	cfg, err := Load()
 	if err == nil {

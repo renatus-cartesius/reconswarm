@@ -1,0 +1,67 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Show all available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -o bin/reconswarm
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  staticcheck:
+    desc: Run staticcheck
+    cmds:
+      - task: install-staticcheck
+      - staticcheck ./...
+
+  install-staticcheck:
+    desc: Install staticcheck if not present
+    cmds:
+      - command -v staticcheck >/dev/null || GOTOOLCHAIN=local go install honnef.co/go/tools/cmd/staticcheck@latest
+    run: once
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - task: install-golangci
+      - golangci-lint run
+
+  install-golangci:
+    desc: Install golangci-lint if not present
+    cmds:
+      - command -v golangci-lint >/dev/null || GOTOOLCHAIN=local go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    run: once
+
+  ci:
+    desc: Run all CI checks
+    deps: [vet, staticcheck, lint, test]
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+      - gofmt -w .
+
+  fmt-check:
+    desc: Check if code is formatted
+    cmds:
+      - |
+        if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
+          echo "Code is not formatted. Run 'task fmt'"
+          gofmt -l .
+          exit 1
+        fi
+

@@ -2,3 +2,4 @@ keys/
 results
 reconswarm
 reconswarm.yaml
+*.out

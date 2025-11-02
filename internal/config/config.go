@@ -97,7 +97,7 @@ func Load() (*Config, error) {
 	}
 
 	if config.FolderID == "" {
-		return nil, fmt.Errorf("Folder ID is required (set folder_id in config file or YC_FOLDER_ID environment variable)")
+		return nil, fmt.Errorf("folder ID is required (set folder_id in config file or YC_FOLDER_ID environment variable)")
 	}
 
 	return config, nil

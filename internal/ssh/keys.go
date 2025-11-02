@@ -97,7 +97,7 @@ func generateNewKeyPair(privateKeyPath, publicKeyPath string) (*KeyPair, error) 
 	defer publicKeyFile.Close()
 
 	// Write public key in OpenSSH format
-	publicKeyString := fmt.Sprintf("%s", ssh.MarshalAuthorizedKey(publicKey))
+	publicKeyString := string(ssh.MarshalAuthorizedKey(publicKey))
 	if _, err := publicKeyFile.WriteString(publicKeyString); err != nil {
 		return nil, fmt.Errorf("failed to write public key: %v", err)
 	}
@@ -147,7 +147,7 @@ func generatePublicKeyFromPrivate(privateKeyPath, publicKeyPath string) (*KeyPai
 	defer publicKeyFile.Close()
 
 	// Write public key in OpenSSH format
-	publicKeyString := fmt.Sprintf("%s", ssh.MarshalAuthorizedKey(publicKey))
+	publicKeyString := string(ssh.MarshalAuthorizedKey(publicKey))
 	if _, err := publicKeyFile.WriteString(publicKeyString); err != nil {
 		return nil, fmt.Errorf("failed to write public key: %v", err)
 	}

@@ -39,14 +39,7 @@ type Config struct {
 // NewController creates a new controller based on the config
 func NewController(config Config) (Controller, error) {
 	// For now, only SSH is supported
-	sshConfig := SSHConfig{
-		Host:         config.Host,
-		User:         config.User,
-		PrivateKey:   config.PrivateKey,
-		Timeout:      config.Timeout,
-		SSHTimeout:   config.SSHTimeout,
-		InstanceName: config.InstanceName,
-	}
+	sshConfig := SSHConfig(config)
 
 	return NewSSH(sshConfig)
 }

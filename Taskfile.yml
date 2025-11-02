@@ -54,14 +54,3 @@ tasks:
     cmds:
       - go fmt ./...
       - gofmt -w .
-
-  fmt-check:
-    desc: Check if code is formatted
-    cmds:
-      - |
-        if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
-          echo "Code is not formatted. Run 'task fmt'"
-          gofmt -l .
-          exit 1
-        fi
-

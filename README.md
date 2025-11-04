@@ -211,6 +211,8 @@ The automatic infrastructure deallocation ensures complete autonomy - all cloud 
 
 ### Example Configurations
 
+For complete pipeline examples, see the [`examples/pipelines`](examples/pipelines) directory.
+
 **Basic subdomain enumeration and scanning**:
 ```yaml
 pipeline:

@@ -1,0 +1,32 @@
+# ReconSwarm Pipeline Example - Katana
+# This example demonstrates how to configure a pipeline with Katana web crawler
+
+pipeline:
+  targets:
+    - value: "example.com"
+      type: crtsh
+    - value: ["somesite.com", "anothersite.com"]
+      type: list
+  stages:
+    - name: "Run katana"
+      type: exec
+      steps:
+        # Run katana crawler with in-scope filtering and JSON output
+        # -d 1: crawl depth of 1
+        # -u: URL input (comma-separated URLs from Targets.list)
+        # -jc: include JavaScript files
+        # -field-scope fqdn: restrict crawling to specified domains only
+        # -j: output in JSON format
+        - "docker run --rm -v /opt/recon:/data projectdiscovery/katana:latest -d 1 -u '{{range $index, $elem := .Targets.list}}{{if $index}},{{end}}https://{{$elem}}{{end}}' -jc -field-scope fqdn -j -o /data/katana-{{.Worker.Name}}.json"
+        # Filter results to keep only JSON responses (content-type: application/json)
+        - "sudo sh -c 'cat /opt/recon/katana-{{.Worker.Name}}.json 2>/dev/null | jq -c \"select(.content_type != null and (.content_type | ascii_downcase | contains(\\\"application/json\\\")))\" > /opt/recon/katana-{{.Worker.Name}}-filtered.json 2>/dev/null || touch /opt/recon/katana-{{.Worker.Name}}-filtered.json'"
+        - "sudo mv /opt/recon/katana-{{.Worker.Name}}-filtered.json /opt/recon/katana-{{.Worker.Name}}.json"
+    - name: "Copy results"
+      type: sync
+      src: "/opt/recon/katana-{{.Worker.Name}}.json"
+      dest: "./results/katana-{{.Worker.Name}}.json"
+    # Example: Sync entire directory recursively
+    # - name: "Copy all results"
+    #   type: sync
+    #   src: "/opt/recon"
+    #   dest: "./results/{{.Worker.Name}}"

@@ -22,7 +22,7 @@ func TestLoadConfigValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to read original config file: %v", err)
 		}
-		
+
 		if err := os.WriteFile(backupPath, originalData, 0644); err != nil {
 			t.Fatalf("failed to create backup config file: %v", err)
 		}
@@ -31,7 +31,7 @@ func TestLoadConfigValidation(t *testing.T) {
 				t.Errorf("failed to remove backup file: %v", err)
 			}
 		}()
-		
+
 		defer func() {
 			if err := os.WriteFile(configPath, originalData, 0644); err != nil {
 				t.Errorf("failed to restore original config file: %v", err)

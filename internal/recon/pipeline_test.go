@@ -41,7 +41,7 @@ func (m *mockController) GetInstanceName() string {
 	return m.instanceName
 }
 
-func (m *mockController) SyncFile(remotePath, localPath string) error {
+func (m *mockController) Sync(remotePath, localPath string) error {
 	m.syncedFiles = append(m.syncedFiles, syncedFile{
 		remotePath: remotePath,
 		localPath:  localPath,

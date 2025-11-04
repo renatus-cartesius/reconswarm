@@ -7,7 +7,7 @@ ReconSwarm is suitable for bug bounty hunters, penetration testers, DevSecOps en
 ## Features
 
 - **Cloud-agnostic architecture** - Provisioner interface allows easy integration with multiple cloud providers (currently Yandex Cloud)
-- **Flexible pipeline stages** - Extensible stage system supporting exec (command execution) and sync (file synchronization) operations
+- **Flexible pipeline stages** - Extensible stage system supporting exec (command execution) and sync (file and directory synchronization) operations
 - **Parallel execution** - Distributes reconnaissance tasks across multiple worker VMs with configurable concurrency
 - **Automatic lifecycle management** - VM provisioning, setup, execution, and cleanup handled automatically
 - **Template-based configuration** - Go templates for dynamic command and path generation
@@ -27,7 +27,7 @@ ReconSwarm uses a modular provisioning system that supports multiple cloud provi
 Stages are extensible components that execute operations on worker VMs:
 
 - **exec** - Execute shell commands with template support
-- **sync** - Copy files from remote VMs to local machine via SFTP
+- **sync** - Copy files or directories from remote VMs to local machine via SFTP (automatically detects file vs directory)
 
 All stage fields support template rendering. New stage types can be added to extend functionality.
 
@@ -171,16 +171,22 @@ stages:
 
 All commands in the `steps` array are template-rendered before execution.
 
-**Sync stage** - Copies files from remote to local using SFTP:
+**Sync stage** - Copies files or directories from remote to local using SFTP. Automatically detects whether the path is a file or directory:
 ```yaml
 stages:
   - name: "Collect results"
     type: sync
     src: "/opt/recon/results.json"
     dest: "./results/{{.Worker.Name}}.json"
+  
+  # Sync entire directory recursively
+  - name: "Collect all results"
+    type: sync
+    src: "/opt/recon"
+    dest: "./results/{{.Worker.Name}}"
 ```
 
-Both `src` (remote path) and `dest` (local path) support template rendering for dynamic file paths.
+Both `src` (remote path) and `dest` (local path) support template rendering for dynamic file paths. The sync stage automatically detects whether the source path is a file or directory and handles it accordingly.
 
 ## Usage
 
@@ -281,6 +287,8 @@ pipeline:
       src: "/opt/recon"
       dest: "./results/{{.Worker.Name}}"
 ```
+
+Note: The sync stage automatically detects that `/opt/recon` is a directory and recursively copies all files and subdirectories to the local destination.
 
 Run with:
 ```bash

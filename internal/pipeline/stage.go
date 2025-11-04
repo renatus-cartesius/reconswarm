@@ -134,9 +134,9 @@ func (s *SyncStage) Execute(controller interface{}, targets []string, targetsFil
 		zap.String("src", renderedSrc),
 		zap.String("dest", renderedDest))
 
-	// Execute the file sync using SFTP
-	if err := ctrl.SyncFile(renderedSrc, renderedDest); err != nil {
-		return fmt.Errorf("failed to sync file: %w", err)
+	// Sync automatically detects whether the path is a file or directory
+	if err := ctrl.Sync(renderedSrc, renderedDest); err != nil {
+		return fmt.Errorf("failed to sync path: %w", err)
 	}
 
 	logging.Logger().Debug("sync stage completed successfully", zap.String("stage_name", s.Name))

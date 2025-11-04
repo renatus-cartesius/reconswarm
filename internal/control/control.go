@@ -22,8 +22,9 @@ type Controller interface {
 	// GetInstanceName returns the instance name
 	GetInstanceName() string
 
-	// SyncFile copies a file from remote host to local machine using SFTP
-	SyncFile(remotePath, localPath string) error
+	// Sync copies a file or directory from remote host to local machine using SFTP.
+	// Automatically detects whether the path is a file or directory and handles accordingly.
+	Sync(remotePath, localPath string) error
 }
 
 // Config defines configuration for creating controllers

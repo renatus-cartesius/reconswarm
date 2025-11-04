@@ -33,7 +33,7 @@ to quickly create a Cobra application.`,
 		}
 
 		ctx := context.Background()
-		if err := recon.Run(ctx, *cfg) ; err != nil {
+		if err := recon.Run(ctx, *cfg); err != nil {
 			logging.Logger().Fatal("pipeline failed", zap.Error(err))
 		}
 

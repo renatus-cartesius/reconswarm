@@ -196,9 +196,10 @@ func (s *SSH) ReadFile(remotePath string) (string, error) {
 	return outputStr, err
 }
 
-// SyncFile copies a file from remote host to local machine using SFTP
-func (s *SSH) SyncFile(remotePath, localPath string) error {
-	logging.Logger().Debug("Syncing file using SFTP",
+// Sync copies a file or directory from remote host to local machine using SFTP.
+// Automatically detects whether the path is a file or directory and handles accordingly.
+func (s *SSH) Sync(remotePath, localPath string) error {
+	logging.Logger().Debug("Syncing path using SFTP",
 		zap.String("remote_path", remotePath),
 		zap.String("local_path", localPath),
 		zap.String("host", s.host),
@@ -211,30 +212,60 @@ func (s *SSH) SyncFile(remotePath, localPath string) error {
 	}
 	defer safeClose("SFTP client", sftpClient.Close)
 
-	// Create local directory if it doesn't exist
-	localDir := filepath.Dir(localPath)
-	if err := os.MkdirAll(localDir, 0755); err != nil {
-		return fmt.Errorf("failed to create local directory: %w", err)
+	// Get remote file info to determine if it's a directory or file
+	remoteInfo, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat remote path: %w", err)
+	}
+
+	if remoteInfo.IsDir() {
+		return s.syncDirectory(sftpClient, remotePath, localPath)
+	}
+	return s.syncFile(sftpClient, remotePath, localPath, remoteInfo)
+}
+
+// copyFile copies a single file from remote to local (internal helper used by both syncFile and syncDirectory)
+func (s *SSH) copyFile(sftpClient *sftp.Client, remotePath, localPath string, fileMode os.FileMode) (int64, error) {
+	// Create parent directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
+		return 0, fmt.Errorf("failed to create local directory: %w", err)
 	}
 
 	// Open remote file
 	remoteFile, err := sftpClient.Open(remotePath)
 	if err != nil {
-		return fmt.Errorf("failed to open remote file: %w", err)
+		return 0, fmt.Errorf("failed to open remote file: %w", err)
 	}
 	defer safeClose("remote file", remoteFile.Close)
 
 	// Create local file
 	localFile, err := os.Create(localPath)
 	if err != nil {
-		return fmt.Errorf("failed to create local file: %w", err)
+		return 0, fmt.Errorf("failed to create local file: %w", err)
 	}
 	defer safeClose("local file", localFile.Close)
 
 	// Copy file content
 	bytesWritten, err := localFile.ReadFrom(remoteFile)
 	if err != nil {
-		return fmt.Errorf("failed to copy file content: %w", err)
+		return 0, fmt.Errorf("failed to copy file content: %w", err)
+	}
+
+	// Set file permissions
+	if err := os.Chmod(localPath, fileMode); err != nil {
+		logging.Logger().Warn("failed to set file permissions",
+			zap.String("path", localPath),
+			zap.Error(err))
+	}
+
+	return bytesWritten, nil
+}
+
+// syncFile copies a single file from remote to local
+func (s *SSH) syncFile(sftpClient *sftp.Client, remotePath, localPath string, remoteInfo os.FileInfo) error {
+	bytesWritten, err := s.copyFile(sftpClient, remotePath, localPath, remoteInfo.Mode())
+	if err != nil {
+		return err
 	}
 
 	logging.Logger().Info("File synced successfully using SFTP",
@@ -243,6 +274,71 @@ func (s *SSH) SyncFile(remotePath, localPath string) error {
 		zap.String("host", s.host),
 		zap.String("instance_name", s.instanceName),
 		zap.Int64("size_bytes", bytesWritten))
+
+	return nil
+}
+
+// syncDirectory recursively copies a directory from remote to local
+func (s *SSH) syncDirectory(sftpClient *sftp.Client, remotePath, localPath string) error {
+	// Create root local directory
+	if err := os.MkdirAll(localPath, 0755); err != nil {
+		return fmt.Errorf("failed to create local directory: %w", err)
+	}
+
+	// Track statistics
+	var filesCopied, dirsCreated int64
+	var totalBytes int64
+
+	// Walk through remote directory recursively
+	walker := sftpClient.Walk(remotePath)
+	for walker.Step() {
+		if err := walker.Err(); err != nil {
+			return fmt.Errorf("failed to walk remote directory: %w", err)
+		}
+
+		remoteFilePath := walker.Path()
+		info := walker.Stat()
+
+		// Calculate relative path from the remote root
+		relPath, err := filepath.Rel(remotePath, remoteFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to calculate relative path: %w", err)
+		}
+
+		// Skip root directory entry (already created)
+		if relPath == "." {
+			continue
+		}
+
+		// Build local file path
+		localFilePath := filepath.Join(localPath, relPath)
+
+		if info.IsDir() {
+			// Create local directory with original permissions
+			// MkdirAll creates all parent directories if needed
+			if err := os.MkdirAll(localFilePath, info.Mode()); err != nil {
+				return fmt.Errorf("failed to create local directory: %w", err)
+			}
+			dirsCreated++
+		} else {
+			// Copy file using shared helper function
+			bytesWritten, err := s.copyFile(sftpClient, remoteFilePath, localFilePath, info.Mode())
+			if err != nil {
+				return err
+			}
+			filesCopied++
+			totalBytes += bytesWritten
+		}
+	}
+
+	logging.Logger().Info("Directory synced successfully using SFTP",
+		zap.String("remote_path", remotePath),
+		zap.String("local_path", localPath),
+		zap.String("host", s.host),
+		zap.String("instance_name", s.instanceName),
+		zap.Int64("files_copied", filesCopied),
+		zap.Int64("dirs_created", dirsCreated),
+		zap.Int64("total_bytes", totalBytes))
 
 	return nil
 }

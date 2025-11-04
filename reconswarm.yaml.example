@@ -41,8 +41,13 @@ pipeline:
       type: exec
       steps:
         - "docker run --rm -v /opt/recon:/data -v {{.Targets.filepath}}:/data/hosts.txt projectdiscovery/nuclei:latest -severity medium,high,critical -l /data/hosts.txt -json-export /data/nuclei-{{.Worker.Name}}.json"
-    - name: "Copy results"
+    - name: "Copy results file"
       type: sync
       src: "/opt/recon/nuclei-{{.Worker.Name}}.json"
       dest: "./results/nuclei-{{.Worker.Name}}.json"
+    # Example: Sync entire directory recursively
+    # - name: "Copy all results"
+    #   type: sync
+    #   src: "/opt/recon"
+    #   dest: "./results/{{.Worker.Name}}"
 

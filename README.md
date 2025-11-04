@@ -304,11 +304,9 @@ Fetches and filters resolvable subdomains from crt.sh for a given domain.
 - [ ] Add Google Cloud Platform (Compute Engine) provisioner
 - [ ] Add Azure (Virtual Machines) provisioner
 - [ ] Add DigitalOcean provisioner
-- [ ] Implement standardized provisioning interface for additional providers
 
 ### Extended Pipeline Stage Types
 
-- [ ] Add `download` stage - Download files or resources to worker VMs
 - [ ] Add `notify` stage - Send notifications or alerts (webhooks, email, Slack)
 - [ ] Add `conditional` stage - Execute stages based on previous stage results
 - [ ] Add `parallel` stage - Execute multiple operations concurrently on the same worker

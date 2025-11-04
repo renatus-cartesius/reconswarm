@@ -84,7 +84,6 @@ func Run(ctx context.Context, cfg config.Config) error {
 	workersCount := min(cfg.MaxWorkers, len(targets))
 
 	// Shuffle targets to distribute them evenly across workers
-	logging.Logger().Info("shuffling targets to ensure even distribution across workers")
 	rand.Shuffle(len(targets), func(i, j int) {
 		targets[i], targets[j] = targets[j], targets[i]
 	})
@@ -97,7 +96,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 			logging.Logger().Info("started worker", zap.Strings("targets", c), zap.Any("provisioner", provisioner))
 
 			// Get VM parameters from environment variables or use defaults
-			name := fmt.Sprintf("reconswarm-demo-%v", uuid.NewString())
+			name := fmt.Sprintf("reconswarm-%v", uuid.NewString())
 
 			// Create worker node specification
 			spec := provisioning.InstanceSpec{

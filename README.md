@@ -308,6 +308,12 @@ Fetches and filters resolvable subdomains from crt.sh for a given domain.
 
 ## TODO
 
+### Statefull runs
+
+- [ ] Add save of run state
+    - [ ] Resolved target list
+    - [ ] Working and ended workers
+
 ### Multi-Cloud Provider Support
 
 - [ ] Add AWS (EC2) provisioner

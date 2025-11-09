@@ -1,5 +1,7 @@
 # ReconSwarm
 
+![Architecture](arch.png)
+
 ReconSwarm is a modular reconnaissance automation framework designed for distributed security testing. It provisions cloud infrastructure, executes parallel reconnaissance pipelines, and collects results with minimal configuration overhead.
 
 ReconSwarm is suitable for bug bounty hunters, penetration testers, DevSecOps engineers, and security researchers who need scalable, automated reconnaissance workflows without manual infrastructure management.

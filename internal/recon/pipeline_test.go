@@ -1,9 +1,11 @@
 package recon
 
 import (
+	"context"
 	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/pipeline"
+	"reconswarm/internal/state"
 	"strings"
 	"testing"
 )
@@ -533,7 +535,16 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	err := runStages(controller, cfg, targets)
+	// Create state and worker
+	s := state.New()
+	workerID := "worker-789"
+	s.AddWorker(state.WorkerState{
+		ID:      workerID,
+		Targets: targets,
+		Status:  "running",
+	})
+
+	err := runStages(context.Background(), controller, cfg, s, workerID, targets)
 	if err != nil {
 		t.Fatalf("Failed to run stages: %v", err)
 	}

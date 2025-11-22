@@ -5,9 +5,12 @@ package cmd
 
 import (
 	"context"
+	"os"
+	"os/signal"
 	"reconswarm/internal/config"
 	"reconswarm/internal/logging"
 	"reconswarm/internal/recon"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -24,7 +27,6 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// Load configuration
 		logging.Logger().Info("Loading configuration")
 		cfg, err := config.Load()
@@ -32,12 +34,28 @@ to quickly create a Cobra application.`,
 			logging.Logger().Fatal("Failed to load configuration", zap.Error(err))
 		}
 
-		ctx := context.Background()
-		if err := recon.Run(ctx, *cfg); err != nil {
-			logging.Logger().Fatal("pipeline failed", zap.Error(err))
-		}
+		// Create context that listens for signals
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-		logging.Logger().Info("manual pipeline finished")
+		// Handle signals
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			logging.Logger().Info("Received interrupt signal, shutting down gracefully...")
+			cancel()
+		}()
+
+		if err := recon.Run(ctx, *cfg); err != nil {
+			if ctx.Err() != nil {
+				logging.Logger().Info("Pipeline interrupted by user")
+			} else {
+				logging.Logger().Fatal("pipeline failed", zap.Error(err))
+			}
+		} else {
+			logging.Logger().Info("manual pipeline finished")
+		}
 	},
 }
 

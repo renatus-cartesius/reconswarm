@@ -3,3 +3,4 @@ results
 reconswarm
 reconswarm.yaml
 *.out
+.reconswarm.json

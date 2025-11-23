@@ -7,9 +7,9 @@ tasks:
       - task --list
 
   build:
-    desc: Build the binary
+    desc: Build the binaries
     cmds:
-      - go build -o bin/reconswarm
+      - go build -o bin/reconswarm ./main.go
 
   test:
     desc: Run tests
@@ -54,3 +54,9 @@ tasks:
     cmds:
       - go fmt ./...
       - gofmt -w .
+
+  proto:
+    desc: Generate Go code from proto files
+    cmds:
+      - protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api/reconswarm.proto
+

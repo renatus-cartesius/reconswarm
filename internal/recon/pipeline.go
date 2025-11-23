@@ -7,6 +7,7 @@ import (
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
+	"reconswarm/internal/pipeline"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/ssh"
 	"slices"
@@ -19,12 +20,12 @@ import (
 )
 
 // PrepareTargets returns all targets from the pipeline
-func PrepareTargets(cfg config.Config) []string {
+func PrepareTargets(p pipeline.Pipeline) []string {
 	var targets []string
 
 	logging.Logger().Info("preparing initial target list")
 
-	for _, target := range cfg.Pipeline().Targets {
+	for _, target := range p.Targets {
 		switch target.Type {
 		case "crtsh":
 			targets = append(targets, target.Value.(string))
@@ -60,7 +61,7 @@ func PrepareTargets(cfg config.Config) []string {
 
 func Run(ctx context.Context, cfg config.Config) error {
 	// Preparing final targets list
-	targets := PrepareTargets(cfg)
+	targets := PrepareTargets(cfg.Pipeline())
 
 	// Get or generate SSH key pair
 	logging.Logger().Info("Getting or generating SSH key pair")
@@ -169,7 +170,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 			}
 
 			// Run recon stages
-			if err := runStages(controller, cfg, c); err != nil {
+			if err := ExecutePipelineOnWorker(controller, cfg.Pipeline(), c); err != nil {
 				logging.Logger().Error("failed to run recon pipeline", zap.Error(err))
 				return
 			}
@@ -189,9 +190,9 @@ func Run(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func runStages(controller control.Controller, cfg config.Config, targets []string) error {
+func ExecutePipelineOnWorker(controller control.Controller, p pipeline.Pipeline, targets []string) error {
 	logging.Logger().Info("starting pipeline stages execution",
-		zap.Int("stages_count", len(cfg.Pipeline().Stages)),
+		zap.Int("stages_count", len(p.Stages)),
 		zap.Strings("targets", targets))
 
 	// Ensure /opt/recon directory exists
@@ -216,7 +217,7 @@ func runStages(controller control.Controller, cfg config.Config, targets []strin
 	}
 
 	// Execute each stage sequentially
-	for stageIndex, stage := range cfg.Pipeline().Stages {
+	for stageIndex, stage := range p.Stages {
 		logging.Logger().Info("executing pipeline stage",
 			zap.Int("stage_index", stageIndex+1),
 			zap.String("stage_name", stage.GetName()),

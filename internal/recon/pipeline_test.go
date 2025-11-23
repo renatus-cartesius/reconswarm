@@ -71,7 +71,7 @@ func TestPrepareTargets(t *testing.T) {
 		},
 	}
 
-	targets := PrepareTargets(cfg)
+	targets := PrepareTargets(cfg.Pipeline())
 
 	// Should contain the original domain + mock subdomains + list targets
 	expectedTargets := []string{"example.com", "www.example.com", "api.example.com", "test1.com", "test2.com"}
@@ -533,7 +533,7 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	err := runStages(controller, cfg, targets)
+	err := ExecutePipelineOnWorker(controller, cfg.Pipeline(), targets)
 	if err != nil {
 		t.Fatalf("Failed to run stages: %v", err)
 	}

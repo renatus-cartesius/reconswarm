@@ -44,19 +44,17 @@ type WorkerManager struct {
 	workers      map[string]*Worker
 	maxWorkers   int
 	provisioner  provisioning.Provisioner
-	stateManager *StateManager
+	stateManager StateManager
 	sshKeyPair   *ssh.KeyPair
 	config       config.Config
+	ctrlFactory  ControllerFactory
 }
 
-// NewWorkerManager creates a new WorkerManager
-func NewWorkerManager(cfg config.Config, sm *StateManager) (*WorkerManager, error) {
-	// Create provisioner
-	prov, err := provisioning.NewYcProvisioner(cfg.IAMToken, cfg.FolderID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provisioner: %w", err)
-	}
+// ControllerFactory creates a new controller
+type ControllerFactory func(config control.Config) (control.Controller, error)
 
+// NewWorkerManager creates a new WorkerManager
+func NewWorkerManager(cfg config.Config, sm StateManager, prov provisioning.Provisioner, cf ControllerFactory) (*WorkerManager, error) {
 	// Get or generate SSH key pair
 	keyDir := "/tmp/reconswarm"
 	keyPair, err := ssh.GetOrGenerateKeyPair(keyDir)
@@ -71,6 +69,7 @@ func NewWorkerManager(cfg config.Config, sm *StateManager) (*WorkerManager, erro
 		stateManager: sm,
 		sshKeyPair:   keyPair,
 		config:       cfg,
+		ctrlFactory:  cf,
 	}, nil
 }
 
@@ -81,11 +80,10 @@ func (wm *WorkerManager) RequestWorkers(ctx context.Context, count int, taskID s
 
 	var allocated []*Worker
 
-	// 1. Reuse idle workers
+	// 1. Reuse idle workers THAT BELONG TO THIS TASK
 	for _, w := range wm.workers {
-		if w.Status == WorkerStatusIdle {
+		if w.Status == WorkerStatusIdle && w.CurrentTask == taskID {
 			w.Status = WorkerStatusBusy
-			w.CurrentTask = taskID
 			w.LastUsed = time.Now()
 			allocated = append(allocated, w)
 			if len(allocated) == count {
@@ -100,7 +98,7 @@ func (wm *WorkerManager) RequestWorkers(ctx context.Context, count int, taskID s
 	toCreate := min(needed, availableSlots)
 
 	if toCreate > 0 {
-		logging.Logger().Info("Creating new workers", zap.Int("count", toCreate))
+		logging.Logger().Info("Creating new workers", zap.Int("count", toCreate), zap.String("task_id", taskID))
 		newWorkers, err := wm.createWorkers(ctx, toCreate, taskID)
 		if err != nil {
 			// If we failed to create some, return what we have (including reused ones)
@@ -119,7 +117,7 @@ func (wm *WorkerManager) ReleaseWorker(workerID string) {
 
 	if w, exists := wm.workers[workerID]; exists {
 		w.Status = WorkerStatusIdle
-		w.CurrentTask = ""
+		// Do NOT clear CurrentTask, as we want to reuse it for the same pipeline
 		w.LastUsed = time.Now()
 		logging.Logger().Info("Worker released", zap.String("worker_id", workerID))
 
@@ -128,6 +126,30 @@ func (wm *WorkerManager) ReleaseWorker(workerID string) {
 			logging.Logger().Error("Failed to save worker state", zap.Error(err))
 		}
 	}
+}
+
+// DeallocateWorkers deallocates all workers for a specific task
+func (wm *WorkerManager) DeallocateWorkers(ctx context.Context, taskID string) error {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+
+	logging.Logger().Info("Deallocating workers for task", zap.String("task_id", taskID))
+
+	for id, w := range wm.workers {
+		if w.CurrentTask == taskID {
+			if err := w.Provisioner.Delete(ctx, w.InstanceID); err != nil {
+				logging.Logger().Error("Failed to delete worker instance", zap.String("instance_id", w.InstanceID), zap.Error(err))
+			}
+			if w.Controller != nil {
+				w.Controller.Close()
+			}
+			if err := wm.stateManager.DeleteWorker(ctx, id); err != nil {
+				logging.Logger().Error("Failed to delete worker state", zap.Error(err))
+			}
+			delete(wm.workers, id)
+		}
+	}
+	return nil
 }
 
 // DeallocateAll deallocates all workers
@@ -194,7 +216,8 @@ func (wm *WorkerManager) createWorkers(ctx context.Context, count int, taskID st
 				InstanceName: instance.Name,
 			}
 
-			controller, err := control.NewController(controlConfig)
+			// Create controller
+			controller, err := wm.ctrlFactory(controlConfig)
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, err)

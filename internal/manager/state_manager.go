@@ -9,13 +9,24 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// StateManager handles state persistence using Etcd
-type StateManager struct {
+// StateManager defines the interface for state persistence
+type StateManager interface {
+	SavePipeline(ctx context.Context, pipelineID string, state any) error
+	GetPipeline(ctx context.Context, pipelineID string, state any) error
+	SaveWorker(ctx context.Context, workerID string, state any) error
+	GetWorker(ctx context.Context, workerID string, state any) error
+	DeleteWorker(ctx context.Context, workerID string) error
+	ListWorkers(ctx context.Context) (map[string][]byte, error)
+	Close() error
+}
+
+// EtcdStateManager handles state persistence using Etcd
+type EtcdStateManager struct {
 	client *clientv3.Client
 }
 
 // NewStateManager creates a new StateManager
-func NewStateManager(endpoints []string) (*StateManager, error) {
+func NewStateManager(endpoints []string) (StateManager, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
 		DialTimeout: 5 * time.Second,
@@ -23,16 +34,16 @@ func NewStateManager(endpoints []string) (*StateManager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to etcd: %w", err)
 	}
-	return &StateManager{client: cli}, nil
+	return &EtcdStateManager{client: cli}, nil
 }
 
 // Close closes the etcd client connection
-func (sm *StateManager) Close() error {
+func (sm *EtcdStateManager) Close() error {
 	return sm.client.Close()
 }
 
 // SavePipeline saves the pipeline state
-func (sm *StateManager) SavePipeline(ctx context.Context, pipelineID string, state any) error {
+func (sm *EtcdStateManager) SavePipeline(ctx context.Context, pipelineID string, state any) error {
 	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to marshal pipeline state: %w", err)
@@ -45,7 +56,7 @@ func (sm *StateManager) SavePipeline(ctx context.Context, pipelineID string, sta
 }
 
 // GetPipeline retrieves the pipeline state
-func (sm *StateManager) GetPipeline(ctx context.Context, pipelineID string, state any) error {
+func (sm *EtcdStateManager) GetPipeline(ctx context.Context, pipelineID string, state any) error {
 	resp, err := sm.client.Get(ctx, fmt.Sprintf("/pipelines/%s", pipelineID))
 	if err != nil {
 		return fmt.Errorf("failed to get pipeline state from etcd: %w", err)
@@ -60,7 +71,7 @@ func (sm *StateManager) GetPipeline(ctx context.Context, pipelineID string, stat
 }
 
 // SaveWorker saves the worker state
-func (sm *StateManager) SaveWorker(ctx context.Context, workerID string, state any) error {
+func (sm *EtcdStateManager) SaveWorker(ctx context.Context, workerID string, state any) error {
 	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to marshal worker state: %w", err)
@@ -73,7 +84,7 @@ func (sm *StateManager) SaveWorker(ctx context.Context, workerID string, state a
 }
 
 // GetWorker retrieves the worker state
-func (sm *StateManager) GetWorker(ctx context.Context, workerID string, state any) error {
+func (sm *EtcdStateManager) GetWorker(ctx context.Context, workerID string, state any) error {
 	resp, err := sm.client.Get(ctx, fmt.Sprintf("/workers/%s", workerID))
 	if err != nil {
 		return fmt.Errorf("failed to get worker state from etcd: %w", err)
@@ -88,7 +99,7 @@ func (sm *StateManager) GetWorker(ctx context.Context, workerID string, state an
 }
 
 // DeleteWorker deletes the worker state
-func (sm *StateManager) DeleteWorker(ctx context.Context, workerID string) error {
+func (sm *EtcdStateManager) DeleteWorker(ctx context.Context, workerID string) error {
 	_, err := sm.client.Delete(ctx, fmt.Sprintf("/workers/%s", workerID))
 	if err != nil {
 		return fmt.Errorf("failed to delete worker state from etcd: %w", err)
@@ -97,7 +108,7 @@ func (sm *StateManager) DeleteWorker(ctx context.Context, workerID string) error
 }
 
 // ListWorkers returns a list of all workers
-func (sm *StateManager) ListWorkers(ctx context.Context) (map[string][]byte, error) {
+func (sm *EtcdStateManager) ListWorkers(ctx context.Context) (map[string][]byte, error) {
 	resp, err := sm.client.Get(ctx, "/workers/", clientv3.WithPrefix())
 	if err != nil {
 		return nil, fmt.Errorf("failed to list workers from etcd: %w", err)

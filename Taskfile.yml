@@ -16,6 +16,11 @@ tasks:
     cmds:
       - go test -v -race -coverprofile=coverage.out ./...
 
+  test-e2e:
+    desc: Run E2E tests
+    cmds:
+      - go test -v ./tests/e2e/...
+
   vet:
     desc: Run go vet
     cmds:

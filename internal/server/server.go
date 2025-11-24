@@ -7,8 +7,10 @@ import (
 	"os"
 	"reconswarm/api"
 	"reconswarm/internal/config"
+	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
 	"reconswarm/internal/manager"
+	"reconswarm/internal/provisioning"
 	"strings"
 
 	"go.uber.org/zap"
@@ -20,7 +22,7 @@ type Server struct {
 	api.UnimplementedReconSwarmServer
 	pipelineManager *manager.PipelineManager
 	workerManager   *manager.WorkerManager
-	stateManager    *manager.StateManager
+	stateManager    manager.StateManager
 }
 
 // NewServer creates a new Server
@@ -35,8 +37,14 @@ func NewServer(cfg config.Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to create state manager: %w", err)
 	}
 
+	// Initialize Provisioner
+	prov, err := provisioning.NewYcProvisioner(cfg.IAMToken, cfg.FolderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create provisioner: %w", err)
+	}
+
 	// Initialize WorkerManager
-	wm, err := manager.NewWorkerManager(cfg, sm)
+	wm, err := manager.NewWorkerManager(cfg, sm, prov, control.NewController)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create worker manager: %w", err)
 	}

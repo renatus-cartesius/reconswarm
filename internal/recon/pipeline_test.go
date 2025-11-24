@@ -1,6 +1,7 @@
 package recon
 
 import (
+	"context"
 	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/pipeline"
@@ -163,7 +164,7 @@ func TestExecuteExecStage_BasicTemplate(t *testing.T) {
 	targetsFile := "/opt/recon/targets-20231201-120000.txt"
 
 	// Execute the stage
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestExecuteExecStage_TargetsTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com", "demo.org"}
 	targetsFile := "/opt/recon/targets-20231201-120000.txt"
 
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -244,7 +245,7 @@ func TestExecuteExecStage_ComplexTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com"}
 	targetsFile := "/opt/recon/targets-20231201-120000.txt"
 
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -281,7 +282,7 @@ func TestExecuteExecStage_EmptySteps(t *testing.T) {
 	targets := []string{"example.com"}
 	targetsFile := "/opt/recon/targets.txt"
 
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -310,7 +311,7 @@ func TestExecuteExecStage_InvalidTemplate(t *testing.T) {
 	targets := []string{"example.com"}
 	targetsFile := "/opt/recon/targets.txt"
 
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err == nil {
 		t.Error("Expected error for invalid template, but got none")
 	}
@@ -413,7 +414,7 @@ func TestExecuteSyncStage_BasicSync(t *testing.T) {
 	targets := []string{"example.com", "test.com"}
 	targetsFile := "/opt/recon/targets-1234567890.txt"
 
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err != nil {
 		t.Fatalf("Failed to execute sync stage: %v", err)
 	}
@@ -452,7 +453,7 @@ func TestExecuteSyncStage_TargetsTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com", "demo.org"}
 	targetsFile := "/opt/recon/targets-1234567890.txt"
 
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err != nil {
 		t.Fatalf("Failed to execute sync stage: %v", err)
 	}
@@ -491,7 +492,7 @@ func TestExecuteSyncStage_InvalidTemplate(t *testing.T) {
 	targets := []string{"example.com"}
 	targetsFile := "/opt/recon/targets.txt"
 
-	err := stage.Execute(controller, targets, targetsFile)
+	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err == nil {
 		t.Error("Expected error for invalid template, but got none")
 	}
@@ -533,7 +534,7 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	err := ExecutePipelineOnWorker(controller, cfg.Pipeline(), targets)
+	err := ExecutePipelineOnWorker(context.Background(), controller, cfg.Pipeline(), targets)
 	if err != nil {
 		t.Fatalf("Failed to run stages: %v", err)
 	}

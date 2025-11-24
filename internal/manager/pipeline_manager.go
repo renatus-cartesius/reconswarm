@@ -202,7 +202,7 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 					return
 				}
 
-				if err := recon.ExecutePipelineOnWorker(currentWorker.Controller, p, t); err != nil {
+				if err := recon.ExecutePipelineOnWorker(context.Background(), currentWorker.Controller, p, t); err != nil {
 					logging.Logger().Error("Pipeline execution failed on worker",
 						zap.String("worker_id", workerID),
 						zap.Error(err))

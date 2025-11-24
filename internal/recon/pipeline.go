@@ -170,7 +170,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 			}
 
 			// Run recon stages
-			if err := ExecutePipelineOnWorker(controller, cfg.Pipeline(), c); err != nil {
+			if err := ExecutePipelineOnWorker(ctx, controller, cfg.Pipeline(), c); err != nil {
 				logging.Logger().Error("failed to run recon pipeline", zap.Error(err))
 				return
 			}
@@ -190,7 +190,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func ExecutePipelineOnWorker(controller control.Controller, p pipeline.Pipeline, targets []string) error {
+func ExecutePipelineOnWorker(ctx context.Context, controller control.Controller, p pipeline.Pipeline, targets []string) error {
 	logging.Logger().Info("starting pipeline stages execution",
 		zap.Int("stages_count", len(p.Stages)),
 		zap.Strings("targets", targets))
@@ -224,7 +224,7 @@ func ExecutePipelineOnWorker(controller control.Controller, p pipeline.Pipeline,
 			zap.String("stage_type", stage.GetType()))
 
 		// Execute the stage using the interface
-		if err := stage.Execute(controller, targets, targetsFile); err != nil {
+		if err := stage.Execute(ctx, controller, targets, targetsFile); err != nil {
 			return fmt.Errorf("failed to execute stage '%s': %w", stage.GetName(), err)
 		}
 

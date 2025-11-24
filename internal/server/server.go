@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"reconswarm/api"
 	"reconswarm/internal/config"
 	"reconswarm/internal/logging"
 	"reconswarm/internal/manager"
+	"strings"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -24,9 +26,10 @@ type Server struct {
 // NewServer creates a new Server
 func NewServer(cfg config.Config) (*Server, error) {
 	// Initialize StateManager
-	// Assuming Etcd endpoints are in config or default
-	// For now hardcoding or adding to config
-	etcdEndpoints := []string{"localhost:2379"} // TODO: Move to config
+	etcdEndpoints := []string{"localhost:2379"}
+	if envEndpoints := os.Getenv("ETCD_ENDPOINTS"); envEndpoints != "" {
+		etcdEndpoints = strings.Split(envEndpoints, ",")
+	}
 	sm, err := manager.NewStateManager(etcdEndpoints)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create state manager: %w", err)

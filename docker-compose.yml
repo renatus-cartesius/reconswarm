@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.0
+    command:
+      - /usr/local/bin/etcd
+      - --advertise-client-urls=http://0.0.0.0:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+    ports:
+      - "2379:2379"
+    volumes:
+      - etcd-data:/etcd-data
+
+  server:
+    build: .
+    ports:
+      - "50051:50051"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      # Add other config env vars here if needed
+      - YC_TOKEN=dummy_token
+      - YC_FOLDER_ID=dummy_folder_id
+    volumes:
+      - ./reconswarm.yaml:/root/.reconswarm.yaml # Mount config file if needed, or rely on env vars
+      - ./keys:/tmp/reconswarm # Persist SSH keys
+    depends_on:
+      - etcd
+
+volumes:
+  etcd-data:

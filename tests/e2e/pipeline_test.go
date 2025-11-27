@@ -46,7 +46,7 @@ func (m *MockController) Run(command string) error {
 	// If command is sleep, actually sleep to simulate long running task
 	if len(command) > 6 && command[:5] == "sleep" {
 		var duration int
-		fmt.Sscanf(command, "sleep %d", &duration)
+		_, _ = fmt.Sscanf(command, "sleep %d", &duration)
 		time.Sleep(time.Duration(duration) * time.Second)
 	}
 	return nil

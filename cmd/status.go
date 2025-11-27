@@ -37,7 +37,9 @@ func init() {
 
 	statusCmd.Flags().StringVar(&statusPipelineID, "id", "", "Pipeline ID (required)")
 	statusCmd.Flags().StringVarP(&statusServerAddr, "server", "s", "localhost:50051", "Server address")
-	statusCmd.MarkFlagRequired("id")
+	if err := statusCmd.MarkFlagRequired("id"); err != nil {
+		panic(fmt.Sprintf("failed to mark flag as required: %v", err))
+	}
 }
 
 func getStatus(serverAddr, pipelineID string) {

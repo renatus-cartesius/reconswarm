@@ -223,7 +223,9 @@ func (wm *WorkerManager) createWorkers(ctx context.Context, count int, taskID st
 				errs = append(errs, err)
 				mu.Unlock()
 				// Try to cleanup failed instance
-				wm.provisioner.Delete(ctx, instance.ID)
+				if delErr := wm.provisioner.Delete(ctx, instance.ID); delErr != nil {
+					logging.Logger().Error("Failed to delete instance during cleanup", zap.String("instance_id", instance.ID), zap.Error(delErr))
+				}
 				return
 			}
 
@@ -233,7 +235,9 @@ func (wm *WorkerManager) createWorkers(ctx context.Context, count int, taskID st
 				errs = append(errs, err)
 				mu.Unlock()
 				controller.Close()
-				wm.provisioner.Delete(ctx, instance.ID)
+				if delErr := wm.provisioner.Delete(ctx, instance.ID); delErr != nil {
+					logging.Logger().Error("Failed to delete instance during cleanup", zap.String("instance_id", instance.ID), zap.Error(delErr))
+				}
 				return
 			}
 

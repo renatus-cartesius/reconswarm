@@ -99,10 +99,14 @@ func (pm *PipelineManager) GetStatus(ctx context.Context, id string) (*PipelineS
 			return nil, fmt.Errorf("pipeline not found: %s", id)
 		}
 		pm.pipelines[id] = &loadedState
-		return &loadedState, nil
+		// Return a copy to avoid data races
+		stateCopy := loadedState
+		return &stateCopy, nil
 	}
 
-	return state, nil
+	// Return a copy to avoid data races when caller reads fields
+	stateCopy := *state
+	return &stateCopy, nil
 }
 
 func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {

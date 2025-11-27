@@ -39,13 +39,13 @@ type PipelineState struct {
 // PipelineManager manages pipeline execution
 type PipelineManager struct {
 	workerManager *WorkerManager
-	stateManager  *StateManager
+	stateManager  StateManager
 	mu            sync.Mutex
 	pipelines     map[string]*PipelineState
 }
 
 // NewPipelineManager creates a new PipelineManager
-func NewPipelineManager(wm *WorkerManager, sm *StateManager) *PipelineManager {
+func NewPipelineManager(wm *WorkerManager, sm StateManager) *PipelineManager {
 	return &PipelineManager{
 		workerManager: wm,
 		stateManager:  sm,
@@ -217,26 +217,9 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 	pm.updateStatus(id, PipelineStatusCompleted, "")
 	logging.Logger().Info("Pipeline execution completed", zap.String("pipeline_id", id))
 
-	// Check if we should deallocate all workers
-	// This is a bit hacky, but per requirements: "After completion of all pipelines, all workers deallocated"
-	// We can check if any other pipelines are running.
-	// But PipelineManager doesn't know if other pipelines are running on other servers (if distributed).
-	// But here we have a single server instance.
-
-	active := false
-	pm.mu.Lock()
-	for _, s := range pm.pipelines {
-		if s.Status == PipelineStatusRunning || s.Status == PipelineStatusPending {
-			active = true
-			break
-		}
-	}
-	pm.mu.Unlock()
-
-	if !active {
-		// Wait a bit to ensure no race with new submissions?
-		time.Sleep(2 * time.Second)
-		pm.workerManager.DeallocateAll(context.Background())
+	// Deallocate workers for this pipeline
+	if err := pm.workerManager.DeallocateWorkers(context.Background(), id); err != nil {
+		logging.Logger().Error("Failed to deallocate workers", zap.String("pipeline_id", id), zap.Error(err))
 	}
 }
 

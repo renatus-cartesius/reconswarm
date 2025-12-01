@@ -21,6 +21,11 @@ tasks:
     cmds:
       - go test -v ./tests/e2e/...
 
+  test-grpc:
+    desc: Run gRPC tests
+    cmds:
+      - go test -v ./tests/grpc/...
+
   vet:
     desc: Run go vet
     cmds:

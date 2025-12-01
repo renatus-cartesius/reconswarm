@@ -52,11 +52,16 @@ func NewServer(cfg config.Config) (*Server, error) {
 	// Initialize PipelineManager
 	pm := manager.NewPipelineManager(wm, sm)
 
+	return NewServerWithDependencies(pm, wm, sm), nil
+}
+
+// NewServerWithDependencies creates a new Server with injected dependencies
+func NewServerWithDependencies(pm *manager.PipelineManager, wm *manager.WorkerManager, sm manager.StateManager) *Server {
 	return &Server{
 		pipelineManager: pm,
 		workerManager:   wm,
 		stateManager:    sm,
-	}, nil
+	}
 }
 
 // RunPipeline implements the RunPipeline RPC

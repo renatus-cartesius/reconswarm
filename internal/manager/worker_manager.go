@@ -291,10 +291,9 @@ func (wm *WorkerManager) GetStatus() []*Worker {
 
 	var status []*Worker
 	for _, w := range wm.workers {
-		// Return a copy or just the pointer (since we are just reading)
-		// But be careful about race conditions if caller modifies it.
-		// For now returning pointer is fine as long as caller treats it as read-only.
-		status = append(status, w)
+		// Return a copy to avoid race conditions
+		wCopy := *w
+		status = append(status, &wCopy)
 	}
 	return status
 }

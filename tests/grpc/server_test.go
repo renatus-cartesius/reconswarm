@@ -12,6 +12,7 @@ import (
 	"reconswarm/internal/manager"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/server"
+	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -76,6 +77,7 @@ func MockControllerFactory(config control.Config) (control.Controller, error) {
 
 // MockStateManager implements manager.StateManager
 type MockStateManager struct {
+	mu        sync.RWMutex
 	pipelines map[string][]byte
 	workers   map[string][]byte
 }
@@ -92,6 +94,8 @@ func (m *MockStateManager) Close() error {
 }
 
 func (m *MockStateManager) SavePipeline(ctx context.Context, pipelineID string, state any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	data, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -101,6 +105,8 @@ func (m *MockStateManager) SavePipeline(ctx context.Context, pipelineID string, 
 }
 
 func (m *MockStateManager) GetPipeline(ctx context.Context, pipelineID string, dest any) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	data, ok := m.pipelines[pipelineID]
 	if !ok {
 		return fmt.Errorf("pipeline %s not found", pipelineID)
@@ -109,11 +115,15 @@ func (m *MockStateManager) GetPipeline(ctx context.Context, pipelineID string, d
 }
 
 func (m *MockStateManager) DeletePipeline(ctx context.Context, pipelineID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.pipelines, pipelineID)
 	return nil
 }
 
 func (m *MockStateManager) ListPipelines(ctx context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	var ids []string
 	for id := range m.pipelines {
 		ids = append(ids, id)
@@ -122,6 +132,8 @@ func (m *MockStateManager) ListPipelines(ctx context.Context) ([]string, error) 
 }
 
 func (m *MockStateManager) SaveWorker(ctx context.Context, workerID string, state any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	data, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -131,6 +143,8 @@ func (m *MockStateManager) SaveWorker(ctx context.Context, workerID string, stat
 }
 
 func (m *MockStateManager) GetWorker(ctx context.Context, workerID string, dest any) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	data, ok := m.workers[workerID]
 	if !ok {
 		return fmt.Errorf("worker %s not found", workerID)
@@ -139,11 +153,15 @@ func (m *MockStateManager) GetWorker(ctx context.Context, workerID string, dest 
 }
 
 func (m *MockStateManager) DeleteWorker(ctx context.Context, workerID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.workers, workerID)
 	return nil
 }
 
 func (m *MockStateManager) ListWorkers(ctx context.Context) (map[string][]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	workers := make(map[string][]byte)
 	for k, v := range m.workers {
 		workers[k] = v

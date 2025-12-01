@@ -212,12 +212,13 @@ var _ = Describe("gRPC Server", func() {
 
 		go func() {
 			if err := srv.Serve(lis); err != nil {
-				// logging.Logger().Error("Server exited", zap.Error(err))
+				// Log error if needed, but for test it's fine
+				_ = err
 			}
 		}()
 
 		// Create client
-		conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+		conn, err = grpc.NewClient("passthrough://bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 			return lis.Dial()
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		Expect(err).NotTo(HaveOccurred())

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
+	"reconswarm/internal/pipeline"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/ssh"
 	"slices"
@@ -19,12 +21,12 @@ import (
 )
 
 // PrepareTargets returns all targets from the pipeline
-func PrepareTargets(cfg config.Config) []string {
+func PrepareTargets(p pipeline.Pipeline) []string {
 	var targets []string
 
 	logging.Logger().Info("preparing initial target list")
 
-	for _, target := range cfg.Pipeline().Targets {
+	for _, target := range p.Targets {
 		switch target.Type {
 		case "crtsh":
 			targets = append(targets, target.Value.(string))
@@ -60,19 +62,23 @@ func PrepareTargets(cfg config.Config) []string {
 
 func Run(ctx context.Context, cfg config.Config) error {
 	// Preparing final targets list
-	targets := PrepareTargets(cfg)
+	targets := PrepareTargets(cfg.Pipeline())
 
-	// Get or generate SSH key pair
-	logging.Logger().Info("Getting or generating SSH key pair")
-	keyDir := "/tmp/reconswarm"
-	keyPair, err := ssh.GetOrGenerateKeyPair(keyDir)
+	// Get etcd endpoints from environment or use default
+	etcdEndpoints := getEtcdEndpoints()
+
+	// Create SSH key provider (etcd or in-memory fallback)
+	keyProvider := ssh.NewKeyProvider(etcdEndpoints)
+	defer keyProvider.Close()
+
+	// Get or create SSH key pair from etcd
+	logging.Logger().Info("Getting SSH key pair from etcd")
+	keyPair, err := keyProvider.GetOrCreate(ctx)
 	if err != nil {
-		logging.Logger().Fatal("Failed to get or generate SSH key pair", zap.Error(err))
+		logging.Logger().Fatal("Failed to get SSH key pair", zap.Error(err))
 	}
 
-	logging.Logger().Info("Using SSH key pair",
-		zap.String("private_key", keyPair.PrivateKeyPath),
-		zap.String("public_key", keyPair.PublicKeyPath))
+	logging.Logger().Info("SSH key pair ready")
 
 	// Create provisioner
 	logging.Logger().Info("Creating Yandex Cloud provisioner")
@@ -123,11 +129,11 @@ func Run(ctx context.Context, cfg config.Config) error {
 				return
 			}
 
-			// Create control configuration
+			// Create control configuration - use private key from memory
 			controlConfig := control.Config{
 				Host:         instance.IP,
 				User:         cfg.DefaultUsername,
-				PrivateKey:   keyPair.PrivateKeyPath,
+				PrivateKey:   keyPair.PrivateKey, // Use key content, not path
 				Timeout:      5 * time.Minute,
 				SSHTimeout:   30 * time.Second,
 				InstanceName: instance.Name,
@@ -169,7 +175,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 			}
 
 			// Run recon stages
-			if err := runStages(controller, cfg, c); err != nil {
+			if err := ExecutePipelineOnWorker(ctx, controller, cfg.Pipeline(), c); err != nil {
 				logging.Logger().Error("failed to run recon pipeline", zap.Error(err))
 				return
 			}
@@ -189,9 +195,9 @@ func Run(ctx context.Context, cfg config.Config) error {
 	return nil
 }
 
-func runStages(controller control.Controller, cfg config.Config, targets []string) error {
+func ExecutePipelineOnWorker(ctx context.Context, controller control.Controller, p pipeline.Pipeline, targets []string) error {
 	logging.Logger().Info("starting pipeline stages execution",
-		zap.Int("stages_count", len(cfg.Pipeline().Stages)),
+		zap.Int("stages_count", len(p.Stages)),
 		zap.Strings("targets", targets))
 
 	// Ensure /opt/recon directory exists
@@ -216,14 +222,14 @@ func runStages(controller control.Controller, cfg config.Config, targets []strin
 	}
 
 	// Execute each stage sequentially
-	for stageIndex, stage := range cfg.Pipeline().Stages {
+	for stageIndex, stage := range p.Stages {
 		logging.Logger().Info("executing pipeline stage",
 			zap.Int("stage_index", stageIndex+1),
 			zap.String("stage_name", stage.GetName()),
 			zap.String("stage_type", stage.GetType()))
 
 		// Execute the stage using the interface
-		if err := stage.Execute(controller, targets, targetsFile); err != nil {
+		if err := stage.Execute(ctx, controller, targets, targetsFile); err != nil {
 			return fmt.Errorf("failed to execute stage '%s': %w", stage.GetName(), err)
 		}
 
@@ -248,4 +254,13 @@ func setupVm(controller control.Controller, cfg config.Config) error {
 	}
 
 	return nil
+}
+
+// getEtcdEndpoints returns etcd endpoints from environment or default
+func getEtcdEndpoints() []string {
+	if endpoints := os.Getenv("ETCD_ENDPOINTS"); endpoints != "" {
+		return strings.Split(endpoints, ",")
+	}
+	// Default to localhost if not specified
+	return []string{"localhost:2379"}
 }

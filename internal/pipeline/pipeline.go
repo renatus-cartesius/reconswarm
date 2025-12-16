@@ -1,5 +1,10 @@
 package pipeline
 
+import (
+	"context"
+	"reconswarm/internal/control"
+)
+
 // Pipeline represents the main pipeline configuration
 type Pipeline struct {
 	Targets []Target `yaml:"targets"`
@@ -10,6 +15,13 @@ type Pipeline struct {
 type PipelineRaw struct {
 	Targets []Target   `yaml:"targets"`
 	Stages  []StageRaw `yaml:"stages"`
+}
+
+// Stage defines the interface for pipeline stages
+type Stage interface {
+	GetName() string
+	GetType() string
+	Execute(ctx context.Context, controller control.Controller, targets []string, targetsFile string) error
 }
 
 // StageRaw represents a raw stage for YAML deserialization

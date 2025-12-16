@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package reconswarm;
+
+option go_package = "reconswarm/api";
+
+service ReconSwarm {
+  rpc RunPipeline(RunPipelineRequest) returns (RunPipelineResponse);
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+}
+
+message RunPipelineRequest {
+  string pipeline_yaml = 1;
+}
+
+message RunPipelineResponse {
+  string pipeline_id = 1;
+}
+
+message GetStatusRequest {
+  string pipeline_id = 1;
+}
+
+message GetStatusResponse {
+  string pipeline_id = 1;
+  string status = 2; // Pending, Running, Completed, Failed
+  string error = 3;
+  int32 total_stages = 4;
+  int32 completed_stages = 5;
+  repeated WorkerStatus workers = 6;
+}
+
+message WorkerStatus {
+  string worker_id = 1;
+  string name = 2;
+  string status = 3; // Provisioning, Running, Idle, Terminated
+  string current_task = 4;
+}

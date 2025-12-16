@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"text/template"
 
@@ -10,13 +11,6 @@ import (
 
 	"go.uber.org/zap"
 )
-
-// Stage defines the interface for pipeline stages
-type Stage interface {
-	GetName() string
-	GetType() string
-	Execute(controller interface{}, targets []string, targetsFile string) error
-}
 
 // ExecStage represents an execution stage
 type ExecStage struct {
@@ -54,11 +48,7 @@ func (s *SyncStage) GetType() string {
 }
 
 // Execute executes the exec stage
-func (e *ExecStage) Execute(controller interface{}, targets []string, targetsFile string) error {
-	ctrl, ok := controller.(control.Controller)
-	if !ok {
-		return fmt.Errorf("invalid controller type for exec stage")
-	}
+func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, targets []string, targetsFile string) error {
 
 	logging.Logger().Debug("executing exec stage", zap.String("stage_name", e.Name))
 
@@ -99,11 +89,7 @@ func (e *ExecStage) Execute(controller interface{}, targets []string, targetsFil
 }
 
 // Execute executes the sync stage
-func (s *SyncStage) Execute(controller interface{}, targets []string, targetsFile string) error {
-	ctrl, ok := controller.(control.Controller)
-	if !ok {
-		return fmt.Errorf("invalid controller type for sync stage")
-	}
+func (s *SyncStage) Execute(ctx context.Context, ctrl control.Controller, targets []string, targetsFile string) error {
 
 	logging.Logger().Debug("executing sync stage", zap.String("stage_name", s.Name))
 

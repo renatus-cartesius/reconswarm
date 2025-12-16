@@ -50,12 +50,13 @@ func safeClose(name string, closer func() error) {
 
 // SSHConfig holds configuration for SSH connection
 type SSHConfig struct {
-	Host         string
-	User         string
-	PrivateKey   string
-	Timeout      time.Duration
-	SSHTimeout   time.Duration
-	InstanceName string
+	Host           string
+	User           string
+	PrivateKey     string // PEM-encoded private key content (preferred)
+	PrivateKeyPath string // Path to private key file (deprecated)
+	Timeout        time.Duration
+	SSHTimeout     time.Duration
+	InstanceName   string
 }
 
 // NewSSH creates a new SSH connection
@@ -66,10 +67,20 @@ func NewSSH(config SSHConfig) (*SSH, error) {
 		return nil, fmt.Errorf("SSH not available after timeout: %w", err)
 	}
 
-	// Load private key
-	signer, err := loadPrivateKey(config.PrivateKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load private key: %w", err)
+	// Load private key - prefer content over path
+	var signer ssh.Signer
+	if config.PrivateKey != "" {
+		signer, err = parsePrivateKey(config.PrivateKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+	} else if config.PrivateKeyPath != "" {
+		signer, err = loadPrivateKeyFromFile(config.PrivateKeyPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load private key from file: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("either PrivateKey or PrivateKeyPath must be provided")
 	}
 
 	// Create SSH client
@@ -378,17 +389,20 @@ func waitForSSH(host string, timeout time.Duration) error {
 	return fmt.Errorf("SSH port not available after %v timeout", timeout)
 }
 
-// loadPrivateKey loads SSH private key from file
-func loadPrivateKey(privateKeyPath string) (ssh.Signer, error) {
+// parsePrivateKey parses SSH private key from PEM-encoded string
+func parsePrivateKey(privateKeyPEM string) (ssh.Signer, error) {
+	signer, err := ssh.ParsePrivateKey([]byte(privateKeyPEM))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+	return signer, nil
+}
+
+// loadPrivateKeyFromFile loads SSH private key from file
+func loadPrivateKeyFromFile(privateKeyPath string) (ssh.Signer, error) {
 	keyBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
-
-	signer, err := ssh.ParsePrivateKey(keyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	return signer, nil
+	return parsePrivateKey(string(keyBytes))
 }

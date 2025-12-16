@@ -12,6 +12,7 @@ import (
 	"reconswarm/internal/manager"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/server"
+	"reconswarm/internal/ssh"
 	"sync"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -73,6 +74,38 @@ func (m *MockController) Sync(remotePath, localPath string) error {
 
 func MockControllerFactory(config control.Config) (control.Controller, error) {
 	return &MockController{InstanceName: config.InstanceName}, nil
+}
+
+// MockKeyProvider implements ssh.KeyProvider
+type MockKeyProvider struct {
+	keyPair *ssh.KeyPair
+}
+
+func NewMockKeyProvider() *MockKeyProvider {
+	return &MockKeyProvider{
+		keyPair: &ssh.KeyPair{
+			PrivateKey: "mock-private-key",
+			PublicKey:  "mock-public-key",
+		},
+	}
+}
+
+func (m *MockKeyProvider) GetOrCreate(ctx context.Context) (*ssh.KeyPair, error) {
+	return m.keyPair, nil
+}
+
+func (m *MockKeyProvider) Save(ctx context.Context, keyPair *ssh.KeyPair) error {
+	m.keyPair = keyPair
+	return nil
+}
+
+func (m *MockKeyProvider) Delete(ctx context.Context) error {
+	m.keyPair = nil
+	return nil
+}
+
+func (m *MockKeyProvider) Close() error {
+	return nil
 }
 
 // MockStateManager implements manager.StateManager
@@ -202,7 +235,8 @@ var _ = Describe("gRPC Server", func() {
 		}
 
 		// Create managers
-		wm, err := manager.NewWorkerManager(cfg, mockSM, mockProv, MockControllerFactory)
+		mockKeyProvider := NewMockKeyProvider()
+		wm, err := manager.NewWorkerManager(cfg, mockSM, mockProv, MockControllerFactory, mockKeyProvider)
 		Expect(err).NotTo(HaveOccurred())
 		pm := manager.NewPipelineManager(wm, mockSM)
 

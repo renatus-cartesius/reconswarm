@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"reconswarm/internal/config"
@@ -36,17 +37,24 @@ This is useful for testing the provisioning and automation functionality.`,
 
 		ctx := context.Background()
 
-		// Get or generate SSH key pair
-		logging.Logger().Info("Getting or generating SSH key pair")
-		keyDir := "keys"
-		keyPair, err := ssh.GetOrGenerateKeyPair(keyDir)
-		if err != nil {
-			logging.Logger().Fatal("Failed to get or generate SSH key pair", zap.Error(err))
+		// Get etcd endpoints from environment
+		etcdEndpoints := []string{"localhost:2379"}
+		if endpoints := os.Getenv("ETCD_ENDPOINTS"); endpoints != "" {
+			etcdEndpoints = strings.Split(endpoints, ",")
 		}
 
-		logging.Logger().Info("Using SSH key pair",
-			zap.String("private_key", keyPair.PrivateKeyPath),
-			zap.String("public_key", keyPair.PublicKeyPath))
+		// Create SSH key provider (etcd or in-memory fallback)
+		keyProvider := ssh.NewKeyProvider(etcdEndpoints)
+		defer keyProvider.Close()
+
+		// Get or create SSH key pair from etcd
+		logging.Logger().Info("Getting SSH key pair from etcd")
+		keyPair, err := keyProvider.GetOrCreate(ctx)
+		if err != nil {
+			logging.Logger().Fatal("Failed to get SSH key pair", zap.Error(err))
+		}
+
+		logging.Logger().Info("SSH key pair ready")
 
 		// Create provisioner (SDK is created inside)
 		logging.Logger().Info("Creating Yandex Cloud provisioner")
@@ -98,13 +106,14 @@ This is useful for testing the provisioning and automation functionality.`,
 				zap.String("ip", instance.IP),
 				zap.Int("setup_commands", len(cfg.SetupCommands)))
 
-			// Create control configuration
+			// Create control configuration - use private key from etcd
 			controlConfig := control.Config{
-				Host:       instance.IP,
-				User:       cfg.DefaultUsername,
-				PrivateKey: keyPair.PrivateKeyPath,
-				Timeout:    5 * time.Minute,
-				SSHTimeout: 30 * time.Second,
+				Host:         instance.IP,
+				User:         cfg.DefaultUsername,
+				PrivateKey:   keyPair.PrivateKey, // Use key content from etcd
+				Timeout:      5 * time.Minute,
+				SSHTimeout:   30 * time.Second,
+				InstanceName: instance.Name,
 			}
 
 			// Create controller

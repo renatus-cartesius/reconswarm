@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
@@ -63,17 +64,21 @@ func Run(ctx context.Context, cfg config.Config) error {
 	// Preparing final targets list
 	targets := PrepareTargets(cfg.Pipeline())
 
-	// Get or generate SSH key pair
-	logging.Logger().Info("Getting or generating SSH key pair")
-	keyDir := "/tmp/reconswarm"
-	keyPair, err := ssh.GetOrGenerateKeyPair(keyDir)
+	// Get etcd endpoints from environment or use default
+	etcdEndpoints := getEtcdEndpoints()
+
+	// Create SSH key provider (etcd or in-memory fallback)
+	keyProvider := ssh.NewKeyProvider(etcdEndpoints)
+	defer keyProvider.Close()
+
+	// Get or create SSH key pair from etcd
+	logging.Logger().Info("Getting SSH key pair from etcd")
+	keyPair, err := keyProvider.GetOrCreate(ctx)
 	if err != nil {
-		logging.Logger().Fatal("Failed to get or generate SSH key pair", zap.Error(err))
+		logging.Logger().Fatal("Failed to get SSH key pair", zap.Error(err))
 	}
 
-	logging.Logger().Info("Using SSH key pair",
-		zap.String("private_key", keyPair.PrivateKeyPath),
-		zap.String("public_key", keyPair.PublicKeyPath))
+	logging.Logger().Info("SSH key pair ready")
 
 	// Create provisioner
 	logging.Logger().Info("Creating Yandex Cloud provisioner")
@@ -124,11 +129,11 @@ func Run(ctx context.Context, cfg config.Config) error {
 				return
 			}
 
-			// Create control configuration
+			// Create control configuration - use private key from memory
 			controlConfig := control.Config{
 				Host:         instance.IP,
 				User:         cfg.DefaultUsername,
-				PrivateKey:   keyPair.PrivateKeyPath,
+				PrivateKey:   keyPair.PrivateKey, // Use key content, not path
 				Timeout:      5 * time.Minute,
 				SSHTimeout:   30 * time.Second,
 				InstanceName: instance.Name,
@@ -249,4 +254,13 @@ func setupVm(controller control.Controller, cfg config.Config) error {
 	}
 
 	return nil
+}
+
+// getEtcdEndpoints returns etcd endpoints from environment or default
+func getEtcdEndpoints() []string {
+	if endpoints := os.Getenv("ETCD_ENDPOINTS"); endpoints != "" {
+		return strings.Split(endpoints, ",")
+	}
+	// Default to localhost if not specified
+	return []string{"localhost:2379"}
 }

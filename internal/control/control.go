@@ -29,18 +29,27 @@ type Controller interface {
 
 // Config defines configuration for creating controllers
 type Config struct {
-	Host         string
-	User         string
-	PrivateKey   string
-	Timeout      time.Duration
-	SSHTimeout   time.Duration
-	InstanceName string
+	Host           string
+	User           string
+	PrivateKey     string        // PEM-encoded private key content (preferred)
+	PrivateKeyPath string        // Path to private key file (deprecated, use PrivateKey)
+	Timeout        time.Duration
+	SSHTimeout     time.Duration
+	InstanceName   string
 }
 
 // NewController creates a new controller based on the config
 func NewController(config Config) (Controller, error) {
 	// For now, only SSH is supported
-	sshConfig := SSHConfig(config)
+	sshConfig := SSHConfig{
+		Host:           config.Host,
+		User:           config.User,
+		PrivateKey:     config.PrivateKey,
+		PrivateKeyPath: config.PrivateKeyPath,
+		Timeout:        config.Timeout,
+		SSHTimeout:     config.SSHTimeout,
+		InstanceName:   config.InstanceName,
+	}
 
 	return NewSSH(sshConfig)
 }

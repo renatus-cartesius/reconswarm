@@ -10,6 +10,7 @@ import (
 )
 
 // StateManager defines the interface for state persistence
+// Note: SSH key management is handled by ssh.KeyProvider
 type StateManager interface {
 	SavePipeline(ctx context.Context, pipelineID string, state any) error
 	GetPipeline(ctx context.Context, pipelineID string, state any) error

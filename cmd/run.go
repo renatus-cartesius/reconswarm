@@ -59,7 +59,7 @@ func runPipeline(serverAddr, pipelineFile string) {
 	defer conn.Close()
 	c := api.NewReconSwarmClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	r, err := c.RunPipeline(ctx, &api.RunPipelineRequest{PipelineYaml: string(content)})

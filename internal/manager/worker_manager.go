@@ -45,7 +45,8 @@ type WorkerManager struct {
 	maxWorkers   int
 	provisioner  provisioning.Provisioner
 	stateManager StateManager
-	sshKeyPair   *ssh.KeyPair
+	keyProvider  ssh.KeyProvider // SSH key provider (etcd-backed)
+	sshKeyPair   *ssh.KeyPair    // Cached SSH keys
 	config       config.Config
 	ctrlFactory  ControllerFactory
 }
@@ -54,12 +55,13 @@ type WorkerManager struct {
 type ControllerFactory func(config control.Config) (control.Controller, error)
 
 // NewWorkerManager creates a new WorkerManager
-func NewWorkerManager(cfg config.Config, sm StateManager, prov provisioning.Provisioner, cf ControllerFactory) (*WorkerManager, error) {
-	// Get or generate SSH key pair
-	keyDir := "/tmp/reconswarm"
-	keyPair, err := ssh.GetOrGenerateKeyPair(keyDir)
+func NewWorkerManager(cfg config.Config, sm StateManager, prov provisioning.Provisioner, cf ControllerFactory, keyProvider ssh.KeyProvider) (*WorkerManager, error) {
+	ctx := context.Background()
+
+	// Get or create SSH keys using the key provider
+	keyPair, err := keyProvider.GetOrCreate(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get or generate SSH key pair: %w", err)
+		return nil, fmt.Errorf("failed to get SSH keys: %w", err)
 	}
 
 	return &WorkerManager{
@@ -67,6 +69,7 @@ func NewWorkerManager(cfg config.Config, sm StateManager, prov provisioning.Prov
 		maxWorkers:   cfg.MaxWorkers,
 		provisioner:  prov,
 		stateManager: sm,
+		keyProvider:  keyProvider,
 		sshKeyPair:   keyPair,
 		config:       cfg,
 		ctrlFactory:  cf,
@@ -206,11 +209,11 @@ func (wm *WorkerManager) createWorkers(ctx context.Context, count int, taskID st
 				return
 			}
 
-			// Create controller
+			// Create controller - use private key from memory (etcd)
 			controlConfig := control.Config{
 				Host:         instance.IP,
 				User:         wm.config.DefaultUsername,
-				PrivateKey:   wm.sshKeyPair.PrivateKeyPath,
+				PrivateKey:   wm.sshKeyPair.PrivateKey, // Use key content, not path
 				Timeout:      5 * time.Minute,
 				SSHTimeout:   30 * time.Second,
 				InstanceName: instance.Name,

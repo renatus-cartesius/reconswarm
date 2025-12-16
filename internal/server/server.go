@@ -11,6 +11,7 @@ import (
 	"reconswarm/internal/logging"
 	"reconswarm/internal/manager"
 	"reconswarm/internal/provisioning"
+	"reconswarm/internal/ssh"
 	"strings"
 
 	"go.uber.org/zap"
@@ -37,14 +38,17 @@ func NewServer(cfg config.Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to create state manager: %w", err)
 	}
 
+	// Initialize SSH Key Provider (stores keys in etcd)
+	keyProvider := ssh.NewKeyProvider(etcdEndpoints)
+
 	// Initialize Provisioner
 	prov, err := provisioning.NewYcProvisioner(cfg.IAMToken, cfg.FolderID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
-	// Initialize WorkerManager
-	wm, err := manager.NewWorkerManager(cfg, sm, prov, control.NewController)
+	// Initialize WorkerManager with SSH key provider
+	wm, err := manager.NewWorkerManager(cfg, sm, prov, control.NewController, keyProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create worker manager: %w", err)
 	}
@@ -66,10 +70,15 @@ func NewServerWithDependencies(pm *manager.PipelineManager, wm *manager.WorkerMa
 
 // RunPipeline implements the RunPipeline RPC
 func (s *Server) RunPipeline(ctx context.Context, req *api.RunPipelineRequest) (*api.RunPipelineResponse, error) {
+	logging.Logger().Info("RunPipeline RPC called", zap.Int("yaml_length", len(req.PipelineYaml)))
+
 	id, err := s.pipelineManager.SubmitPipeline(ctx, req.PipelineYaml)
 	if err != nil {
+		logging.Logger().Error("SubmitPipeline failed", zap.Error(err))
 		return nil, err
 	}
+
+	logging.Logger().Info("Pipeline submitted", zap.String("pipeline_id", id))
 	return &api.RunPipelineResponse{PipelineId: id}, nil
 }
 

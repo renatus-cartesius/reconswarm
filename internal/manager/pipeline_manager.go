@@ -53,12 +53,36 @@ func NewPipelineManager(wm *WorkerManager, sm StateManager) *PipelineManager {
 	}
 }
 
+// pipelineWrapper is used to parse YAML files with "pipeline:" root key
+type pipelineWrapper struct {
+	Pipeline pipeline.PipelineRaw `yaml:"pipeline"`
+}
+
 // SubmitPipeline submits a pipeline for execution
 func (pm *PipelineManager) SubmitPipeline(ctx context.Context, yamlContent string) (string, error) {
-	// Parse pipeline
-	var rawPipeline pipeline.PipelineRaw
-	if err := yaml.Unmarshal([]byte(yamlContent), &rawPipeline); err != nil {
+	logging.Logger().Debug("SubmitPipeline called", zap.Int("yaml_length", len(yamlContent)))
+
+	// Try to parse with "pipeline:" wrapper first
+	var wrapper pipelineWrapper
+	if err := yaml.Unmarshal([]byte(yamlContent), &wrapper); err != nil {
 		return "", fmt.Errorf("failed to parse pipeline YAML: %w", err)
+	}
+
+	// Use the wrapper if it has content, otherwise try direct parsing
+	var rawPipeline pipeline.PipelineRaw
+	if len(wrapper.Pipeline.Targets) > 0 || len(wrapper.Pipeline.Stages) > 0 {
+		rawPipeline = wrapper.Pipeline
+		logging.Logger().Debug("Parsed pipeline with wrapper",
+			zap.Int("targets", len(rawPipeline.Targets)),
+			zap.Int("stages", len(rawPipeline.Stages)))
+	} else {
+		// Fallback: try parsing without wrapper
+		if err := yaml.Unmarshal([]byte(yamlContent), &rawPipeline); err != nil {
+			return "", fmt.Errorf("failed to parse pipeline YAML (direct): %w", err)
+		}
+		logging.Logger().Debug("Parsed pipeline directly",
+			zap.Int("targets", len(rawPipeline.Targets)),
+			zap.Int("stages", len(rawPipeline.Stages)))
 	}
 
 	p := rawPipeline.ToPipeline()

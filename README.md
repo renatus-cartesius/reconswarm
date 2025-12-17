@@ -8,15 +8,16 @@ ReconSwarm is suitable for bug bounty hunters, penetration testers, DevSecOps en
 
 ## Features
 
-- **Cloud-agnostic architecture** - Provisioner interface with discriminated union pattern allows easy integration with multiple cloud providers (currently Yandex Cloud)
-- **Flexible pipeline stages** - Extensible stage system supporting exec (command execution) and sync (file and directory synchronization) operations
-- **Parallel execution** - Distributes reconnaissance tasks across multiple worker VMs with configurable concurrency
-- **Automatic lifecycle management** - VM provisioning, setup, execution, and cleanup handled automatically
-- **Template-based configuration** - Go templates for dynamic command and path generation
-- **Multiple target types** - Support for crt.sh enumeration and manual target lists
-- **Stateful execution** - etcd-backed state management for pipeline and worker tracking
-- **gRPC API** - Server mode with gRPC interface for pipeline submission and status monitoring
-- **Minimal dependencies** - Lightweight design with only essential dependencies
+- **Cloud-agnostic architecture** — Provisioner interface with discriminated union pattern allows easy integration with multiple cloud providers (currently Yandex Cloud)
+- **Flexible pipeline stages** — Extensible stage system supporting exec (command execution) and sync (file and directory synchronization) operations
+- **Parallel execution** — Distributes reconnaissance tasks across multiple worker VMs with configurable concurrency
+- **Automatic lifecycle management** — VM provisioning, setup, execution, and cleanup handled automatically
+- **Template-based configuration** — Go templates for dynamic command and path generation
+- **Multiple target types** — Support for crt.sh enumeration and manual target lists
+- **Stateless server** — Server stores no local state; all data persisted in etcd for fault tolerance
+- **Horizontal scalability** — Run multiple server instances behind a load balancer
+- **gRPC API** — Server mode with gRPC interface for pipeline submission and status monitoring
+- **Config-driven** — All server settings configured via YAML file with environment variable support
 
 ## Architecture
 
@@ -24,16 +25,71 @@ ReconSwarm follows a modular architecture with clear separation of concerns betw
 
 ### Cloud Provider Abstraction
 
-ReconSwarm uses a discriminated union pattern for cloud provisioners. The `provisioner.type` field determines which provider configuration is active. Current implementations include Yandex Cloud. Additional cloud providers can be integrated by implementing the `Provisioner` interface.
+ReconSwarm uses a **discriminated union pattern** for cloud provisioners. The `provisioner.type` field determines which provider configuration is active:
+
+```yaml
+provisioner:
+  type: yandex_cloud  # Discriminator field
+  yandex_cloud:       # Active when type: yandex_cloud
+    iam_token: "${YC_TOKEN}"
+    folder_id: "${YC_FOLDER_ID}"
+    # ... provider-specific settings
+```
+
+Additional cloud providers can be integrated by implementing the `Provisioner` interface and adding a new type to the factory.
 
 ### Pipeline Stage System
 
 Stages are extensible components that execute operations on worker VMs:
 
-- **exec** - Execute shell commands with template support
-- **sync** - Copy files or directories from remote VMs to local machine via SFTP (automatically detects file vs directory)
+- **exec** — Execute shell commands with template support
+- **sync** — Copy files or directories from remote VMs to local machine via SFTP (automatically detects file vs directory)
 
 All stage fields support template rendering. New stage types can be added to extend functionality.
+
+### Stateless Server & Fault Tolerance
+
+ReconSwarm server is **completely stateless** — all state is persisted in etcd:
+
+- **Pipeline state** — Status, progress, errors for each pipeline
+- **Worker state** — VM info, current task, status
+- **SSH keys** — Generated key pairs for VM access
+
+This architecture enables:
+
+| Capability | Description |
+|------------|-------------|
+| **Horizontal scaling** | Run multiple server instances behind a load balancer |
+| **Zero-downtime restarts** | Restart server without losing pipeline state |
+| **Crash recovery** | New server instance picks up where the previous one left off |
+| **State inspection** | Query etcd directly for debugging and monitoring |
+
+**High Availability Setup:**
+
+```
+                    ┌─────────────┐
+                    │   Client    │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │Load Balancer│
+                    └──────┬──────┘
+              ┌────────────┼────────────┐
+              │            │            │
+       ┌──────▼──────┐ ┌───▼───┐ ┌──────▼──────┐
+       │  Server 1   │ │Server2│ │  Server 3   │
+       └──────┬──────┘ └───┬───┘ └──────┬──────┘
+              │            │            │
+              └────────────┼────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │ etcd cluster│
+                    └─────────────┘
+```
+
+All servers share the same etcd cluster and can handle any request. If a server crashes mid-pipeline, another server can continue execution after reading state from etcd.
+
+**Note:** Current implementation executes pipelines in-memory after loading from etcd. Full crash recovery with pipeline resumption is planned for future releases.
 
 ## Installation
 
@@ -48,8 +104,10 @@ task build
 
 ReconSwarm separates **server configuration** from **pipeline configuration**:
 
-- **Server config** (`reconswarm.yaml`) - Cloud provider settings, etcd connection, worker pool configuration
-- **Pipeline config** (separate YAML file) - Targets and stages, passed via `-f` flag
+| Config Type | File | Description |
+|-------------|------|-------------|
+| Server | `reconswarm.yaml` | Cloud provider, etcd, worker pool settings |
+| Pipeline | Separate YAML file | Targets and stages, passed via `-f` flag |
 
 ### Server Configuration
 
@@ -93,8 +151,9 @@ workers:
 
 ### Pipeline Configuration
 
-Pipeline configuration is stored in a separate YAML file and passed via the `-f` flag:
+Pipeline configuration is stored in a separate YAML file and passed via the `-f` flag. Both wrapped and unwrapped formats are supported:
 
+**Wrapped format** (recommended):
 ```yaml
 # pipeline.yaml
 pipeline:
@@ -114,11 +173,24 @@ pipeline:
       dest: "./results/{{.Worker.Name}}.txt"
 ```
 
+**Unwrapped format** (also supported):
+```yaml
+# pipeline.yaml
+targets:
+  - value: "example.com"
+    type: crtsh
+stages:
+  - name: "Run scanner"
+    type: exec
+    steps:
+      - "nmap -iL {{.Targets.filepath}} -oN /opt/recon/scan.txt"
+```
+
 ### Environment Variables
 
 Configuration values support environment variable substitution in two formats:
-- `${VAR}` - Full variable name in braces
-- `$VAR` - Simple variable name
+- `${VAR}` — Full variable name in braces
+- `$VAR` — Simple variable name
 
 If an environment variable is not set, the literal string (including `${VAR}` or `$VAR`) will be used.
 
@@ -144,9 +216,9 @@ For Yandex Cloud integration, use the provided setup script:
    ```
    
    This script exports:
-   - `YC_TOKEN` - IAM token for authentication
-   - `YC_FOLDER_ID` - Folder ID for resource management
-   - `YC_CLOUD_ID` - Cloud ID (if needed)
+   - `YC_TOKEN` — IAM token for authentication
+   - `YC_FOLDER_ID` — Folder ID for resource management
+   - `YC_CLOUD_ID` — Cloud ID (if needed)
 
 4. **Reference in configuration**:
    ```yaml
@@ -183,11 +255,13 @@ All stage configuration fields support Go template syntax for dynamic value gene
 
 The following data is available in all stage templates:
 
-- `{{.Targets.filepath}}` - Absolute path to the targets file on the remote VM (contains all targets assigned to the worker)
-- `{{.Targets.list}}` - Array of target strings for programmatic access
-- `{{.Worker.Name}}` - Unique identifier of the worker VM instance
+| Variable | Description |
+|----------|-------------|
+| `{{.Targets.filepath}}` | Absolute path to the targets file on the remote VM |
+| `{{.Targets.list}}` | Array of target strings for programmatic access |
+| `{{.Worker.Name}}` | Unique identifier of the worker VM instance |
 
-**Exec stage** - Executes shell commands with template support:
+**Exec stage** — Executes shell commands with template support:
 ```yaml
 stages:
   - name: "Run tool"
@@ -199,7 +273,7 @@ stages:
 
 All commands in the `steps` array are template-rendered before execution.
 
-**Sync stage** - Copies files or directories from remote to local using SFTP. Automatically detects whether the path is a file or directory:
+**Sync stage** — Copies files or directories from remote to local using SFTP. Automatically detects whether the path is a file or directory:
 ```yaml
 stages:
   - name: "Collect results"
@@ -237,8 +311,8 @@ reconswarm run -f examples/pipelines/nuclei.yaml
 ```
 
 Options:
-- `-f, --pipeline` - Path to pipeline YAML file (required)
-- `-s, --server` - Server address (default: `localhost:50051`)
+- `-f, --pipeline` — Path to pipeline YAML file (required)
+- `-s, --server` — Server address (default: `localhost:50051`)
 
 ### Check Pipeline Status
 
@@ -255,22 +329,24 @@ reconswarm manual -f examples/pipelines/nuclei.yaml
 ```
 
 This command:
-1. Prepares targets (enumerates subdomains via crt.sh if needed)
-2. Creates worker VMs based on `workers.max_workers` configuration
-3. Distributes targets across workers
-4. Executes setup commands on each VM
-5. Runs pipeline stages sequentially
-6. Collects results via sync stages
-7. Automatically deallocates all infrastructure after completion
+1. Reads server configuration from `reconswarm.yaml`
+2. Prepares targets (enumerates subdomains via crt.sh if needed)
+3. Creates worker VMs based on `workers.max_workers` configuration
+4. Distributes targets across workers
+5. Executes setup commands on each VM
+6. Runs pipeline stages sequentially
+7. Collects results via sync stages
+8. Automatically deallocates all infrastructure after completion
 
-The automatic infrastructure deallocation ensures complete autonomy - all cloud resources are provisioned, used, and destroyed without manual intervention, enabling fully automated reconnaissance workflows.
+The automatic infrastructure deallocation ensures complete autonomy — all cloud resources are provisioned, used, and destroyed without manual intervention, enabling fully automated reconnaissance workflows.
 
 ### Example Configurations
 
 For complete pipeline examples, see the [`examples/pipelines`](examples/pipelines) directory.
 
-**Basic subdomain enumeration and scanning** (`pipeline.yaml`):
+**Basic subdomain enumeration and scanning**:
 ```yaml
+# pipeline.yaml
 pipeline:
   targets:
     - value: "example.com"
@@ -352,11 +428,6 @@ pipeline:
 
 Note: The sync stage automatically detects that `/opt/recon` is a directory and recursively copies all files and subdirectories to the local destination.
 
-Run with:
-```bash
-reconswarm manual -f pipeline.yaml
-```
-
 ### Other Commands
 
 **Subdomain enumeration**:
@@ -385,7 +456,7 @@ task ci         # Run all CI checks
 
 ## TODO
 
-### Statefull runs
+### Stateful runs
 
 - [ ] Add save of run state
     - [ ] Resolved target list
@@ -400,12 +471,12 @@ task ci         # Run all CI checks
 
 ### Extended Pipeline Stage Types
 
-- [ ] Add `notify` stage - Send notifications or alerts (webhooks, email, Slack)
-- [ ] Add `conditional` stage - Execute stages based on previous stage results
-- [ ] Add `parallel` stage - Execute multiple operations concurrently on the same worker
-- [ ] Add `retry` stage - Automatically retry failed operations with configurable backoff
-- [ ] Add `timeout` stage - Set execution timeouts per stage
-- [ ] Add `validate` stage - Validate results or conditions before proceeding
+- [ ] Add `notify` stage — Send notifications or alerts (webhooks, email, Slack)
+- [ ] Add `conditional` stage — Execute stages based on previous stage results
+- [ ] Add `parallel` stage — Execute multiple operations concurrently on the same worker
+- [ ] Add `retry` stage — Automatically retry failed operations with configurable backoff
+- [ ] Add `timeout` stage — Set execution timeouts per stage
+- [ ] Add `validate` stage — Validate results or conditions before proceeding
 
 ### Daemon Mode with Scheduled Execution
 

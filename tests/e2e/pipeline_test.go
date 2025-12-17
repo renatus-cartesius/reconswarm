@@ -183,10 +183,39 @@ func (m *MockStateManager) ListWorkers(ctx context.Context) (map[string][]byte, 
 	return workers, nil
 }
 
+// createTestConfig creates a test configuration using the new structure
+func createTestConfig() config.Config {
+	return config.Config{
+		Server: config.ServerConfig{
+			Port: 50051,
+		},
+		Etcd: config.EtcdConfig{
+			Endpoints:   []string{"localhost:2379"},
+			DialTimeout: 5,
+		},
+		Provisioner: config.ProvisionerConfig{
+			Type: config.ProviderYandexCloud,
+			YandexCloud: &config.YandexCloudConfig{
+				IAMToken:        "fake-token",
+				FolderID:        "fake-folder",
+				DefaultZone:     "ru-central1-a",
+				DefaultImage:    "fd80bm0rh4rkepi5ksdi",
+				DefaultUsername: "ubuntu",
+				DefaultCores:    2,
+				DefaultMemory:   4,
+				DefaultDiskSize: 20,
+			},
+		},
+		Workers: config.WorkersConfig{
+			MaxWorkers: 5,
+		},
+	}
+}
+
 var _ = Describe("Pipeline E2E", func() {
 	var (
 		cfg             config.Config
-		stateManager    *MockStateManager // Changed to MockStateManager
+		stateManager    *MockStateManager
 		workerManager   *manager.WorkerManager
 		pipelineManager *manager.PipelineManager
 		ctx             context.Context
@@ -196,28 +225,17 @@ var _ = Describe("Pipeline E2E", func() {
 	BeforeEach(func() {
 		ctx, cancel = context.WithCancel(context.Background())
 
-		// Setup configuration for testing
-		cfg = config.Config{
-			MaxWorkers:      5,
-			DefaultCores:    2,
-			DefaultMemory:   4,
-			DefaultDiskSize: 20,
-			DefaultImage:    "fd80bm0rh4rkepi5ksdi", // Ubuntu 20.04 LTS
-			DefaultZone:     "ru-central1-a",
-			DefaultUsername: "ubuntu",
-			IAMToken:        "fake-token",
-			FolderID:        "fake-folder",
-		}
+		// Setup configuration for testing using new structure
+		cfg = createTestConfig()
 
-		// Connect to Etcd (assuming local etcd is running)
-		// var err error // Removed, as NewMockStateManager doesn't return error
-		stateManager = NewMockStateManager() // Changed to use MockStateManager
+		// Use MockStateManager
+		stateManager = NewMockStateManager()
 
 		// Initialize Managers with Mocks
 		mockProv := &MockProvisioner{}
 		mockKeyProvider := NewMockKeyProvider()
 
-		var err error // Re-declared for workerManager
+		var err error
 		workerManager, err = manager.NewWorkerManager(cfg, stateManager, mockProv, MockControllerFactory, mockKeyProvider)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -259,8 +277,6 @@ stages:
 			}, 30*time.Second, 1*time.Second).Should(Equal(manager.PipelineStatusCompleted))
 
 			// Verify workers are released/deallocated
-			// Since we use DeallocateWorkers, the workers for this task should be gone from memory
-			// We can check WorkerManager state
 			workers := workerManager.GetStatus()
 			for _, w := range workers {
 				Expect(w.CurrentTask).NotTo(Equal(id))
@@ -344,8 +360,7 @@ stages:
 				return s.Status
 			}, 10*time.Second, 500*time.Millisecond).Should(Equal(manager.PipelineStatusRunning))
 
-			// Simulate "Restart" by creating new managers connected to same Etcd
-			// For mock, we reuse the same stateManager instance to simulate "same DB"
+			// Simulate "Restart" by creating new managers connected to same StateManager
 			newStateManager := stateManager
 
 			mockProv := &MockProvisioner{}
@@ -356,7 +371,6 @@ stages:
 			newPipelineManager := manager.NewPipelineManager(newWorkerManager, newStateManager)
 
 			// Check status from new manager
-			// It should be able to load from Etcd
 			status, err := newPipelineManager.GetStatus(ctx, id)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(status.Status).To(Or(Equal(manager.PipelineStatusRunning), Equal(manager.PipelineStatusCompleted)))

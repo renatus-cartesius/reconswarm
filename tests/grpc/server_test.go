@@ -22,10 +22,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-// Reusing mocks from e2e tests would be ideal, but they are in a different package (e2e_test).
-// We should probably move mocks to a shared package or duplicate them for now to avoid import cycles or visibility issues.
-// Given the simplicity, I'll duplicate them here for isolation, but in a real project, they should be in a `test/mocks` package.
-
 // MockProvisioner implements provisioning.Provisioner
 type MockProvisioner struct{}
 
@@ -202,6 +198,35 @@ func (m *MockStateManager) ListWorkers(ctx context.Context) (map[string][]byte, 
 	return workers, nil
 }
 
+// createTestConfig creates a test configuration using the new structure
+func createTestConfig() config.Config {
+	return config.Config{
+		Server: config.ServerConfig{
+			Port: 50051,
+		},
+		Etcd: config.EtcdConfig{
+			Endpoints:   []string{"localhost:2379"},
+			DialTimeout: 5,
+		},
+		Provisioner: config.ProvisionerConfig{
+			Type: config.ProviderYandexCloud,
+			YandexCloud: &config.YandexCloudConfig{
+				IAMToken:        "fake-token",
+				FolderID:        "fake-folder",
+				DefaultZone:     "test-zone",
+				DefaultImage:    "test-image",
+				DefaultUsername: "test-user",
+				DefaultCores:    2,
+				DefaultMemory:   4,
+				DefaultDiskSize: 20,
+			},
+		},
+		Workers: config.WorkersConfig{
+			MaxWorkers: 5,
+		},
+	}
+}
+
 const bufSize = 1024 * 1024
 
 var _ = Describe("gRPC Server", func() {
@@ -224,15 +249,7 @@ var _ = Describe("gRPC Server", func() {
 		// Setup mocks
 		mockSM = NewMockStateManager()
 		mockProv = &MockProvisioner{}
-		cfg := config.Config{
-			MaxWorkers:      5,
-			DefaultCores:    2,
-			DefaultMemory:   4,
-			DefaultDiskSize: 20,
-			DefaultImage:    "test-image",
-			DefaultZone:     "test-zone",
-			DefaultUsername: "test-user",
-		}
+		cfg := createTestConfig()
 
 		// Create managers
 		mockKeyProvider := NewMockKeyProvider()
@@ -246,7 +263,6 @@ var _ = Describe("gRPC Server", func() {
 
 		go func() {
 			if err := srv.Serve(lis); err != nil {
-				// Log error if needed, but for test it's fine
 				_ = err
 			}
 		}()

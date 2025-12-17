@@ -64,5 +64,5 @@ func init() {
 	rootCmd.AddCommand(manualCmd)
 
 	manualCmd.Flags().StringVarP(&manualPipelineFile, "file", "f", "", "Path to pipeline YAML file (required)")
-	manualCmd.MarkFlagRequired("file")
+	_ = manualCmd.MarkFlagRequired("file")
 }

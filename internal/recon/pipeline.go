@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
@@ -60,15 +59,14 @@ func PrepareTargets(p pipeline.Pipeline) []string {
 	return targets
 }
 
-func Run(ctx context.Context, cfg config.Config) error {
+// Run executes the pipeline using the provided configuration.
+// Pipeline is passed separately from config as it's specified via 'run' subcommand.
+func Run(ctx context.Context, cfg config.Config, p pipeline.Pipeline) error {
 	// Preparing final targets list
-	targets := PrepareTargets(cfg.Pipeline())
+	targets := PrepareTargets(p)
 
-	// Get etcd endpoints from environment or use default
-	etcdEndpoints := getEtcdEndpoints()
-
-	// Create SSH key provider (etcd or in-memory fallback)
-	keyProvider := ssh.NewKeyProvider(etcdEndpoints)
+	// Create SSH key provider using etcd endpoints from config
+	keyProvider := ssh.NewKeyProvider(cfg.Etcd.Endpoints)
 	defer keyProvider.Close()
 
 	// Get or create SSH key pair from etcd
@@ -80,14 +78,17 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	logging.Logger().Info("SSH key pair ready")
 
-	// Create provisioner
-	logging.Logger().Info("Creating Yandex Cloud provisioner")
-	provisioner, err := provisioning.NewYcProvisioner(cfg.IAMToken, cfg.FolderID)
+	// Create provisioner using factory
+	logging.Logger().Info("Creating provisioner", zap.String("type", string(cfg.Provisioner.Type)))
+	provisioner, err := provisioning.NewProvisioner(cfg.Provisioner)
 	if err != nil {
 		logging.Logger().Fatal("Failed to create provisioner", zap.Error(err))
 	}
 
-	workersCount := min(cfg.MaxWorkers, len(targets))
+	// Get VM defaults from provisioner config
+	vmDefaults := provisioning.GetVMDefaults(cfg.Provisioner)
+
+	workersCount := min(cfg.Workers.MaxWorkers, len(targets))
 
 	// Shuffle targets to distribute them evenly across workers
 	rand.Shuffle(len(targets), func(i, j int) {
@@ -107,13 +108,13 @@ func Run(ctx context.Context, cfg config.Config) error {
 			// Create worker node specification
 			spec := provisioning.InstanceSpec{
 				Name:         name,
-				Cores:        cfg.DefaultCores,
-				Memory:       cfg.DefaultMemory,
-				DiskSize:     cfg.DefaultDiskSize,
-				ImageID:      cfg.DefaultImage,
-				Zone:         cfg.DefaultZone,
+				Cores:        vmDefaults.Cores,
+				Memory:       vmDefaults.Memory,
+				DiskSize:     vmDefaults.DiskSize,
+				ImageID:      vmDefaults.Image,
+				Zone:         vmDefaults.Zone,
 				SSHPublicKey: keyPair.PublicKey,
-				Username:     cfg.DefaultUsername,
+				Username:     vmDefaults.Username,
 			}
 
 			// Create worker node
@@ -132,7 +133,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 			// Create control configuration - use private key from memory
 			controlConfig := control.Config{
 				Host:         instance.IP,
-				User:         cfg.DefaultUsername,
+				User:         vmDefaults.Username,
 				PrivateKey:   keyPair.PrivateKey, // Use key content, not path
 				Timeout:      5 * time.Minute,
 				SSHTimeout:   30 * time.Second,
@@ -167,15 +168,15 @@ func Run(ctx context.Context, cfg config.Config) error {
 			// Setup vm
 			logging.Logger().Info("starting worker node setup",
 				zap.String("ip", instance.IP),
-				zap.Int("command_count", len(cfg.SetupCommands)))
+				zap.Int("command_count", len(cfg.Workers.SetupCommands)))
 
-			if err := setupVm(controller, cfg); err != nil {
+			if err := setupVm(controller, cfg.Workers.SetupCommands); err != nil {
 				logging.Logger().Error("failed to setup worker node", zap.Error(err))
 				return
 			}
 
 			// Run recon stages
-			if err := ExecutePipelineOnWorker(ctx, controller, cfg.Pipeline(), c); err != nil {
+			if err := ExecutePipelineOnWorker(ctx, controller, p, c); err != nil {
 				logging.Logger().Error("failed to run recon pipeline", zap.Error(err))
 				return
 			}
@@ -240,12 +241,12 @@ func ExecutePipelineOnWorker(ctx context.Context, controller control.Controller,
 	return nil
 }
 
-func setupVm(controller control.Controller, cfg config.Config) error {
+func setupVm(controller control.Controller, setupCommands []string) error {
 	// Run setup commands from configuration
-	for i, cmd := range cfg.SetupCommands {
+	for i, cmd := range setupCommands {
 		logging.Logger().Debug("executing setup command",
 			zap.Int("step", i+1),
-			zap.Int("total", len(cfg.SetupCommands)),
+			zap.Int("total", len(setupCommands)),
 			zap.String("command", cmd))
 
 		if err := controller.Run(cmd); err != nil {
@@ -254,13 +255,4 @@ func setupVm(controller control.Controller, cfg config.Config) error {
 	}
 
 	return nil
-}
-
-// getEtcdEndpoints returns etcd endpoints from environment or default
-func getEtcdEndpoints() []string {
-	if endpoints := os.Getenv("ETCD_ENDPOINTS"); endpoints != "" {
-		return strings.Split(endpoints, ",")
-	}
-	// Default to localhost if not specified
-	return []string{"localhost:2379"}
 }

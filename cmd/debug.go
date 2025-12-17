@@ -6,8 +6,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"reconswarm/internal/config"
@@ -37,14 +35,8 @@ This is useful for testing the provisioning and automation functionality.`,
 
 		ctx := context.Background()
 
-		// Get etcd endpoints from environment
-		etcdEndpoints := []string{"localhost:2379"}
-		if endpoints := os.Getenv("ETCD_ENDPOINTS"); endpoints != "" {
-			etcdEndpoints = strings.Split(endpoints, ",")
-		}
-
-		// Create SSH key provider (etcd or in-memory fallback)
-		keyProvider := ssh.NewKeyProvider(etcdEndpoints)
+		// Create SSH key provider using etcd endpoints from config
+		keyProvider := ssh.NewKeyProvider(cfg.Etcd.Endpoints)
 		defer keyProvider.Close()
 
 		// Get or create SSH key pair from etcd
@@ -56,29 +48,29 @@ This is useful for testing the provisioning and automation functionality.`,
 
 		logging.Logger().Info("SSH key pair ready")
 
-		// Create provisioner (SDK is created inside)
-		logging.Logger().Info("Creating Yandex Cloud provisioner")
-		provisioner, err := provisioning.NewYcProvisioner(cfg.IAMToken, cfg.FolderID)
+		// Create provisioner using factory
+		logging.Logger().Info("Creating provisioner", zap.String("type", string(cfg.Provisioner.Type)))
+		provisioner, err := provisioning.NewProvisioner(cfg.Provisioner)
 		if err != nil {
 			logging.Logger().Fatal("Failed to create provisioner", zap.Error(err))
 		}
 
-		// Get VM parameters from environment variables or use defaults
-		name := os.Getenv("YC_INSTANCE_NAME")
-		if name == "" {
-			name = fmt.Sprintf("reconswarm-demo-%v", time.Now().Unix())
-		}
+		// Get VM defaults from provisioner config
+		vmDefaults := provisioning.GetVMDefaults(cfg.Provisioner)
+
+		// Get VM name
+		name := fmt.Sprintf("reconswarm-demo-%v", time.Now().Unix())
 
 		// Create VM specification
 		spec := provisioning.InstanceSpec{
 			Name:         name,
-			Cores:        cfg.DefaultCores,
-			Memory:       cfg.DefaultMemory,
-			DiskSize:     cfg.DefaultDiskSize,
-			ImageID:      cfg.DefaultImage,
-			Zone:         cfg.DefaultZone,
+			Cores:        vmDefaults.Cores,
+			Memory:       vmDefaults.Memory,
+			DiskSize:     vmDefaults.DiskSize,
+			ImageID:      vmDefaults.Image,
+			Zone:         vmDefaults.Zone,
 			SSHPublicKey: keyPair.PublicKey,
-			Username:     cfg.DefaultUsername,
+			Username:     vmDefaults.Username,
 		}
 
 		// Create VM
@@ -104,12 +96,12 @@ This is useful for testing the provisioning and automation functionality.`,
 		if instance.IP != "" {
 			logging.Logger().Info("Starting VM setup via SSH",
 				zap.String("ip", instance.IP),
-				zap.Int("setup_commands", len(cfg.SetupCommands)))
+				zap.Int("setup_commands", len(cfg.Workers.SetupCommands)))
 
 			// Create control configuration - use private key from etcd
 			controlConfig := control.Config{
 				Host:         instance.IP,
-				User:         cfg.DefaultUsername,
+				User:         vmDefaults.Username,
 				PrivateKey:   keyPair.PrivateKey, // Use key content from etcd
 				Timeout:      5 * time.Minute,
 				SSHTimeout:   30 * time.Second,
@@ -133,12 +125,12 @@ This is useful for testing the provisioning and automation functionality.`,
 				// Run setup commands from configuration
 				logging.Logger().Info("Starting VM setup",
 					zap.String("ip", instance.IP),
-					zap.Int("command_count", len(cfg.SetupCommands)))
+					zap.Int("command_count", len(cfg.Workers.SetupCommands)))
 
-				for i, cmd := range cfg.SetupCommands {
+				for i, cmd := range cfg.Workers.SetupCommands {
 					logging.Logger().Debug("Executing setup command",
 						zap.Int("step", i+1),
-						zap.Int("total", len(cfg.SetupCommands)),
+						zap.Int("total", len(cfg.Workers.SetupCommands)),
 						zap.String("command", cmd))
 
 					err = controller.Run(cmd)
@@ -174,14 +166,4 @@ This is useful for testing the provisioning and automation functionality.`,
 
 func init() {
 	rootCmd.AddCommand(debugCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// debugCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// debugCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

@@ -45,9 +45,10 @@ type WorkerManager struct {
 	maxWorkers   int
 	provisioner  provisioning.Provisioner
 	stateManager StateManager
-	keyProvider  ssh.KeyProvider // SSH key provider (etcd-backed)
-	sshKeyPair   *ssh.KeyPair    // Cached SSH keys
-	config       config.Config
+	keyProvider  ssh.KeyProvider
+	sshKeyPair   *ssh.KeyPair
+	vmDefaults   provisioning.VMDefaults
+	setupCmds    []string
 	ctrlFactory  ControllerFactory
 }
 
@@ -64,14 +65,18 @@ func NewWorkerManager(cfg config.Config, sm StateManager, prov provisioning.Prov
 		return nil, fmt.Errorf("failed to get SSH keys: %w", err)
 	}
 
+	// Extract VM defaults from provisioner config
+	vmDefaults := provisioning.GetVMDefaults(cfg.Provisioner)
+
 	return &WorkerManager{
 		workers:      make(map[string]*Worker),
-		maxWorkers:   cfg.MaxWorkers,
+		maxWorkers:   cfg.Workers.MaxWorkers,
 		provisioner:  prov,
 		stateManager: sm,
 		keyProvider:  keyProvider,
 		sshKeyPair:   keyPair,
-		config:       cfg,
+		vmDefaults:   vmDefaults,
+		setupCmds:    cfg.Workers.SetupCommands,
 		ctrlFactory:  cf,
 	}, nil
 }
@@ -120,7 +125,6 @@ func (wm *WorkerManager) ReleaseWorker(workerID string) {
 
 	if w, exists := wm.workers[workerID]; exists {
 		w.Status = WorkerStatusIdle
-		// Do NOT clear CurrentTask, as we want to reuse it for the same pipeline
 		w.LastUsed = time.Now()
 		logging.Logger().Info("Worker released", zap.String("worker_id", workerID))
 
@@ -192,13 +196,13 @@ func (wm *WorkerManager) createWorkers(ctx context.Context, count int, taskID st
 			name := fmt.Sprintf("reconswarm-%v", uuid.NewString())
 			spec := provisioning.InstanceSpec{
 				Name:         name,
-				Cores:        wm.config.DefaultCores,
-				Memory:       wm.config.DefaultMemory,
-				DiskSize:     wm.config.DefaultDiskSize,
-				ImageID:      wm.config.DefaultImage,
-				Zone:         wm.config.DefaultZone,
+				Cores:        wm.vmDefaults.Cores,
+				Memory:       wm.vmDefaults.Memory,
+				DiskSize:     wm.vmDefaults.DiskSize,
+				ImageID:      wm.vmDefaults.Image,
+				Zone:         wm.vmDefaults.Zone,
 				SSHPublicKey: wm.sshKeyPair.PublicKey,
-				Username:     wm.config.DefaultUsername,
+				Username:     wm.vmDefaults.Username,
 			}
 
 			instance, err := wm.provisioner.Create(ctx, spec)
@@ -212,14 +216,13 @@ func (wm *WorkerManager) createWorkers(ctx context.Context, count int, taskID st
 			// Create controller - use private key from memory (etcd)
 			controlConfig := control.Config{
 				Host:         instance.IP,
-				User:         wm.config.DefaultUsername,
-				PrivateKey:   wm.sshKeyPair.PrivateKey, // Use key content, not path
+				User:         wm.vmDefaults.Username,
+				PrivateKey:   wm.sshKeyPair.PrivateKey,
 				Timeout:      5 * time.Minute,
 				SSHTimeout:   30 * time.Second,
 				InstanceName: instance.Name,
 			}
 
-			// Create controller
 			controller, err := wm.ctrlFactory(controlConfig)
 			if err != nil {
 				mu.Lock()
@@ -279,7 +282,7 @@ func (wm *WorkerManager) createWorkers(ctx context.Context, count int, taskID st
 }
 
 func (wm *WorkerManager) setupWorker(controller control.Controller) error {
-	for _, cmd := range wm.config.SetupCommands {
+	for _, cmd := range wm.setupCmds {
 		if err := controller.Run(cmd); err != nil {
 			return fmt.Errorf("failed to run setup command '%s': %w", cmd, err)
 		}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"reconswarm/api"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
@@ -12,7 +11,6 @@ import (
 	"reconswarm/internal/manager"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/ssh"
-	"strings"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -24,30 +22,27 @@ type Server struct {
 	pipelineManager *manager.PipelineManager
 	workerManager   *manager.WorkerManager
 	stateManager    manager.StateManager
+	config          config.Config
 }
 
-// NewServer creates a new Server
+// NewServer creates a new Server from configuration
 func NewServer(cfg config.Config) (*Server, error) {
-	// Initialize StateManager
-	etcdEndpoints := []string{"localhost:2379"}
-	if envEndpoints := os.Getenv("ETCD_ENDPOINTS"); envEndpoints != "" {
-		etcdEndpoints = strings.Split(envEndpoints, ",")
-	}
-	sm, err := manager.NewStateManager(etcdEndpoints)
+	// Initialize StateManager with etcd config
+	sm, err := manager.NewStateManager(cfg.Etcd.Endpoints)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create state manager: %w", err)
 	}
 
 	// Initialize SSH Key Provider (stores keys in etcd)
-	keyProvider := ssh.NewKeyProvider(etcdEndpoints)
+	keyProvider := ssh.NewKeyProvider(cfg.Etcd.Endpoints)
 
-	// Initialize Provisioner
-	prov, err := provisioning.NewYcProvisioner(cfg.IAMToken, cfg.FolderID)
+	// Initialize Provisioner using factory pattern
+	prov, err := provisioning.NewProvisioner(cfg.Provisioner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner: %w", err)
 	}
 
-	// Initialize WorkerManager with SSH key provider
+	// Initialize WorkerManager
 	wm, err := manager.NewWorkerManager(cfg, sm, prov, control.NewController, keyProvider)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create worker manager: %w", err)
@@ -56,10 +51,15 @@ func NewServer(cfg config.Config) (*Server, error) {
 	// Initialize PipelineManager
 	pm := manager.NewPipelineManager(wm, sm)
 
-	return NewServerWithDependencies(pm, wm, sm), nil
+	return &Server{
+		pipelineManager: pm,
+		workerManager:   wm,
+		stateManager:    sm,
+		config:          cfg,
+	}, nil
 }
 
-// NewServerWithDependencies creates a new Server with injected dependencies
+// NewServerWithDependencies creates a new Server with injected dependencies (for testing)
 func NewServerWithDependencies(pm *manager.PipelineManager, wm *manager.WorkerManager, sm manager.StateManager) *Server {
 	return &Server{
 		pipelineManager: pm,
@@ -100,14 +100,6 @@ func (s *Server) GetStatus(ctx context.Context, req *api.GetStatusRequest) (*api
 	// Add worker status
 	workers := s.workerManager.GetStatus()
 	for _, w := range workers {
-		// Only include workers relevant to this pipeline?
-		// Or all workers? The requirement says "information about workers".
-		// If we filter by pipeline, we might miss idle workers or workers on other pipelines.
-		// But GetStatusRequest has PipelineId.
-		// If PipelineId is empty, maybe return all?
-		// But the proto says GetStatusRequest takes PipelineId.
-		// Let's return all workers for now, or maybe filter if they are working on this pipeline.
-
 		if w.CurrentTask == req.PipelineId || w.Status == manager.WorkerStatusIdle {
 			resp.Workers = append(resp.Workers, &api.WorkerStatus{
 				WorkerId:    w.ID,
@@ -121,8 +113,13 @@ func (s *Server) GetStatus(ctx context.Context, req *api.GetStatusRequest) (*api
 	return resp, nil
 }
 
-// Start starts the gRPC server
-func (s *Server) Start(port int) error {
+// Start starts the gRPC server on the configured port
+func (s *Server) Start() error {
+	return s.StartOnPort(s.config.Server.Port)
+}
+
+// StartOnPort starts the gRPC server on a specific port (for backwards compatibility)
+func (s *Server) StartOnPort(port int) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)

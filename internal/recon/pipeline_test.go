@@ -3,7 +3,6 @@ package recon
 import (
 	"context"
 	"os"
-	"reconswarm/internal/config"
 	"reconswarm/internal/pipeline"
 	"strings"
 	"testing"
@@ -57,22 +56,20 @@ func TestPrepareTargets(t *testing.T) {
 	SetCrtshClient(mockClient)
 	defer SetCrtshClient(&DefaultCrtshClient{}) // Restore default client
 
-	cfg := config.Config{
-		PipelineRaw: pipeline.PipelineRaw{
-			Targets: []pipeline.Target{
-				{
-					Type:  "crtsh",
-					Value: "example.com",
-				},
-				{
-					Type:  "list",
-					Value: []any{"test1.com", "test2.com"},
-				},
+	pipelineRaw := pipeline.PipelineRaw{
+		Targets: []pipeline.Target{
+			{
+				Type:  "crtsh",
+				Value: "example.com",
+			},
+			{
+				Type:  "list",
+				Value: []any{"test1.com", "test2.com"},
 			},
 		},
 	}
 
-	targets := PrepareTargets(cfg.Pipeline())
+	targets := PrepareTargets(pipelineRaw.ToPipeline())
 
 	// Should contain the original domain + mock subdomains + list targets
 	expectedTargets := []string{"example.com", "www.example.com", "api.example.com", "test1.com", "test2.com"}
@@ -510,23 +507,21 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	cfg := config.Config{
-		PipelineRaw: pipeline.PipelineRaw{
-			Stages: []pipeline.StageRaw{
-				{
-					Name: "First Stage",
-					Type: "exec",
-					Steps: []string{
-						"echo 'Starting {{.Worker.Name}}'",
-						"mkdir -p /opt/recon",
-					},
+	pipelineRaw := pipeline.PipelineRaw{
+		Stages: []pipeline.StageRaw{
+			{
+				Name: "First Stage",
+				Type: "exec",
+				Steps: []string{
+					"echo 'Starting {{.Worker.Name}}'",
+					"mkdir -p /opt/recon",
 				},
-				{
-					Name: "Second Stage",
-					Type: "exec",
-					Steps: []string{
-						"nuclei -l {{.Targets.filepath}} -o /opt/recon/{{.Worker.Name}}-nuclei.txt",
-					},
+			},
+			{
+				Name: "Second Stage",
+				Type: "exec",
+				Steps: []string{
+					"nuclei -l {{.Targets.filepath}} -o /opt/recon/{{.Worker.Name}}-nuclei.txt",
 				},
 			},
 		},
@@ -534,7 +529,7 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	err := ExecutePipelineOnWorker(context.Background(), controller, cfg.Pipeline(), targets)
+	err := ExecutePipelineOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
 	if err != nil {
 		t.Fatalf("Failed to run stages: %v", err)
 	}

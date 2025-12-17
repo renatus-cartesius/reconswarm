@@ -1,53 +1,69 @@
 # ReconSwarm Configuration
+# All server settings are configured through this file
 
-# YC connection parameters
-# Can use environment variables: ${YC_TOKEN} or $YC_TOKEN
-# If YC_TOKEN and YC_FOLDER_ID env vars are set, they will override these values
-iam_token: "${YC_TOKEN}"
-folder_id: "${YC_FOLDER_ID}"
+# =============================================================================
+# Server Settings
+# =============================================================================
+server:
+  port: 50051
 
-# Default VM settings
-default_zone: "ru-central1-b"
-default_image: "fd8b1cmhmncn7lt4tqn4"  # YC image optimized for containers
-default_username: "root" # "reconswarm"
-# Default VM parameters
-default_cores: 2
-default_memory: 2  # 2GB
-default_disk_size: 20  # 20GB
+# =============================================================================
+# Etcd Connection Settings
+# =============================================================================
+etcd:
+  endpoints:
+    - "localhost:2379"
+  dial_timeout: 5  # seconds
+  # Optional authentication (supports env vars: ${ETCD_USER})
+  username: ""
+  password: ""
 
-max_workers: 5
+# =============================================================================
+# Cloud Provisioner Configuration (Discriminated Union)
+# Currently supported types: yandex_cloud
+# =============================================================================
+provisioner:
+  type: yandex_cloud
 
-# Setup commands to run on newly created VMs
-setup_commands:
-  - "echo dummy"
-  # - "apt update"
-  # - "sudo apt install -y curl wget htop vim git ca-certificates"
-  # - "sudo install -m 0755 -d /etc/apt/keyrings"
-  # - "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc > /dev/null"
-  # - "sudo chmod a+r /etc/apt/keyrings/docker.asc"
-  # - "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"${UBUNTU_CODENAME}\") stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null"
-  # - "sudo apt update"
-  # - "sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
-  # - "usermod -aG docker $USER"
+  # Yandex Cloud specific configuration
+  # Active when type: yandex_cloud
+  yandex_cloud:
+    # Authentication (supports env vars: ${YC_TOKEN}, ${YC_FOLDER_ID})
+    iam_token: "${YC_TOKEN}"
+    folder_id: "${YC_FOLDER_ID}"
 
-pipeline:
-  targets:
-    - value: "example.com"
-      type: crtsh
-    - value: ["somesite.com", "anothersite.com"]
-      type: list
-  stages:
-    - name: "Run nuclei and collect results"
-      type: exec
-      steps:
-        - "docker run --rm -v /opt/recon:/data -v {{.Targets.filepath}}:/data/hosts.txt projectdiscovery/nuclei:latest -severity medium,high,critical -l /data/hosts.txt -json-export /data/nuclei-{{.Worker.Name}}.json"
-    - name: "Copy results file"
-      type: sync
-      src: "/opt/recon/nuclei-{{.Worker.Name}}.json"
-      dest: "./results/nuclei-{{.Worker.Name}}.json"
-    # Example: Sync entire directory recursively
-    # - name: "Copy all results"
-    #   type: sync
-    #   src: "/opt/recon"
-    #   dest: "./results/{{.Worker.Name}}"
+    # Default VM settings
+    default_zone: "ru-central1-b"
+    default_image: "fd8b1cmhmncn7lt4tqn4"  # YC image optimized for containers
+    default_username: "root"
 
+    # VM resources
+    default_cores: 2
+    default_memory: 2     # GB
+    default_disk_size: 20 # GB
+
+# =============================================================================
+# Worker Pool Settings
+# =============================================================================
+workers:
+  max_workers: 5
+
+  # Setup commands to run on newly created VMs
+  setup_commands:
+    - "echo 'Worker ready'"
+    # - "apt update"
+    # - "apt install -y curl wget htop vim git ca-certificates"
+    # - "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null"
+    # - "chmod a+r /etc/apt/keyrings/docker.asc"
+    # - "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${UBUNTU_CODENAME}) stable\" | tee /etc/apt/sources.list.d/docker.list > /dev/null"
+    # - "apt update"
+    # - "apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+
+# =============================================================================
+# Pipeline Configuration
+# =============================================================================
+# NOTE: Pipeline is NOT configured here!
+# Pipeline is passed via the 'run' subcommand:
+#   reconswarm run -f pipeline.yaml
+#
+# See examples/pipeline.yaml for pipeline configuration format.

@@ -18,6 +18,11 @@ import (
 
 var manualPipelineFile string
 
+// pipelineWrapper supports both wrapped and unwrapped pipeline formats
+type pipelineWrapper struct {
+	Pipeline pipeline.PipelineRaw `yaml:"pipeline"`
+}
+
 // manualCmd represents the manual command
 var manualCmd = &cobra.Command{
 	Use:   "manual",
@@ -46,9 +51,29 @@ Example:
 			logging.Logger().Fatal("Failed to read pipeline file", zap.Error(err))
 		}
 
-		var pipelineRaw pipeline.PipelineRaw
-		if err := yaml.Unmarshal(pipelineData, &pipelineRaw); err != nil {
+		// Try parsing with wrapper first (pipeline: key)
+		var wrapper pipelineWrapper
+		if err := yaml.Unmarshal(pipelineData, &wrapper); err != nil {
 			logging.Logger().Fatal("Failed to parse pipeline YAML", zap.Error(err))
+		}
+
+		var pipelineRaw pipeline.PipelineRaw
+		if len(wrapper.Pipeline.Targets) > 0 || len(wrapper.Pipeline.Stages) > 0 {
+			// Pipeline was wrapped with "pipeline:" key
+			pipelineRaw = wrapper.Pipeline
+		} else {
+			// Fallback: try parsing without wrapper (direct targets/stages)
+			if err := yaml.Unmarshal(pipelineData, &pipelineRaw); err != nil {
+				logging.Logger().Fatal("Failed to parse pipeline YAML", zap.Error(err))
+			}
+		}
+
+		if len(pipelineRaw.Targets) == 0 {
+			logging.Logger().Fatal("Pipeline has no targets defined")
+		}
+
+		if len(pipelineRaw.Stages) == 0 {
+			logging.Logger().Fatal("Pipeline has no stages defined")
 		}
 
 		ctx := context.Background()

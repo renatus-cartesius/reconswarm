@@ -67,7 +67,7 @@ func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, target
 	for stepIndex, stepTemplate := range e.Steps {
 		logging.Logger().Debug("executing step",
 			zap.Int("step_index", stepIndex+1),
-			zap.String("template", stepTemplate))
+			zap.String("template", logging.Truncate(stepTemplate)))
 
 		// Render template
 		renderedCommand, err := renderTemplate(stepTemplate, templateContext)
@@ -75,7 +75,7 @@ func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, target
 			return fmt.Errorf("failed to render template for step %d: %w", stepIndex+1, err)
 		}
 
-		logging.Logger().Debug("rendered command", zap.String("command", renderedCommand))
+		logging.Logger().Debug("rendered command", zap.String("command", logging.Truncate(renderedCommand)))
 
 		// Execute the rendered command
 		if err := ctrl.Run(renderedCommand); err != nil {

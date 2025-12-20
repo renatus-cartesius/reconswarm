@@ -8,8 +8,8 @@ import (
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
-	"reconswarm/internal/manager"
 	"reconswarm/internal/provisioning"
+	"reconswarm/internal/server/manager"
 	"reconswarm/internal/ssh"
 
 	"go.uber.org/zap"

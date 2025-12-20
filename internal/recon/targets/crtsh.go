@@ -1,4 +1,4 @@
-package recon
+package targets
 
 import (
 	"encoding/json"

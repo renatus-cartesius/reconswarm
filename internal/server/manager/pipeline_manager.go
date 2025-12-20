@@ -3,13 +3,14 @@ package manager
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reconswarm/internal/logging"
 	"reconswarm/internal/pipeline"
-	"reconswarm/internal/recon"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/alitto/pond/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -60,7 +61,6 @@ type pipelineWrapper struct {
 
 // SubmitPipeline submits a pipeline for execution
 func (pm *PipelineManager) SubmitPipeline(ctx context.Context, yamlContent string) (string, error) {
-	logging.Logger().Debug("SubmitPipeline called", zap.Int("yaml_length", len(yamlContent)))
 
 	// Try to parse with "pipeline:" wrapper first
 	var wrapper pipelineWrapper
@@ -138,117 +138,67 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 
 	pm.updateStatus(id, PipelineStatusRunning, "")
 
-	// Prepare targets
-	targets := recon.PrepareTargets(p)
-	if len(targets) == 0 {
+	// Compile targets using pipeline layer (which uses recon utilities)
+	targetsList := pipeline.CompileTargets(p)
+	if len(targetsList) == 0 {
 		pm.updateStatus(id, PipelineStatusFailed, "No targets found")
 		return
 	}
 
-	// Calculate needed workers (simple heuristic for now)
-	// We want to distribute targets evenly
-	// Let's say we want at least 1 target per worker, but max 10 workers per pipeline?
-	// Or just ask for as many as possible up to a limit?
-	// The requirement says "Server assigned part of fragments... to already running workers".
+	// Calculate workers count (same as CLI)
+	workersCount := min(pm.workerManager.MaxWorkers(), len(targetsList))
 
-	// Let's try to get workers in chunks
-	remainingTargets := targets
+	logging.Logger().Info("Pipeline targets compiled",
+		zap.String("pipeline_id", id),
+		zap.Int("total_targets", len(targetsList)),
+		zap.Int("workers_count", workersCount))
 
-	// We'll use a wait group to wait for all chunks to complete
-	var wg sync.WaitGroup
+	// Shuffle targets to distribute them evenly across workers
+	rand.Shuffle(len(targetsList), func(i, j int) {
+		targetsList[i], targetsList[j] = targetsList[j], targetsList[i]
+	})
 
-	// Loop until all targets are processed
-	for len(remainingTargets) > 0 {
-		// Determine chunk size based on available workers or default
-		// For simplicity, let's say we want to process 10 targets per worker
-		chunkSize := 10
-		neededWorkers := (len(remainingTargets) + chunkSize - 1) / chunkSize
+	// Create worker pool with concurrency limit
+	pool := pond.NewPool(workersCount)
+	ctx := context.Background()
 
-		// Request workers
-		// We request up to neededWorkers
-		workers, err := pm.workerManager.RequestWorkers(context.Background(), neededWorkers, id)
-		if err != nil {
-			logging.Logger().Error("Error requesting workers", zap.Error(err))
-			// Wait and retry
-			time.Sleep(5 * time.Second)
-			continue
-		}
+	// Process each chunk: create ephemeral worker -> execute -> delete worker
+	for chunk := range slices.Chunk(targetsList, (len(targetsList)+workersCount-1)/workersCount) {
+		pool.Submit(func() {
+			logging.Logger().Info("started ephemeral worker", zap.Int("targets_count", len(chunk)))
 
-		if len(workers) == 0 {
-			// No workers available, wait and retry
-			logging.Logger().Info("No workers available, waiting...", zap.String("pipeline_id", id))
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		logging.Logger().Info("Got workers", zap.Int("count", len(workers)), zap.String("pipeline_id", id))
-
-		// Distribute targets to workers
-		// We take len(workers) * chunkSize targets
-		numTargetsToProcess := len(workers) * chunkSize
-		if numTargetsToProcess > len(remainingTargets) {
-			numTargetsToProcess = len(remainingTargets)
-		}
-
-		targetsToProcess := remainingTargets[:numTargetsToProcess]
-		remainingTargets = remainingTargets[numTargetsToProcess:]
-
-		// Split targetsToProcess among workers
-		chunks := slices.Chunk(targetsToProcess, (len(targetsToProcess)+len(workers)-1)/len(workers))
-
-		chunkIdx := 0
-		for chunk := range chunks {
-			if chunkIdx >= len(workers) {
-				break
+			// Create ephemeral worker
+			worker, err := pm.workerManager.CreateEphemeralWorker(ctx)
+			if err != nil {
+				logging.Logger().Error("failed to create ephemeral worker", zap.Error(err))
+				return
 			}
-			worker := workers[chunkIdx]
-			chunkIdx++
 
-			wg.Add(1)
-			go func(w *WorkerManager, workerID string, t []string) {
-				defer wg.Done()
-				defer w.ReleaseWorker(workerID)
-
-				// We need to get the worker object again or pass it?
-				// RequestWorkers returned *Worker objects.
-				// But we need to access the controller.
-				// The Worker struct has the Controller.
-				// But we only have the ID here if we passed ID.
-				// Wait, RequestWorkers returns []*Worker.
-
-				// Let's find the worker object from the list we got
-				var currentWorker *Worker
-				for _, wk := range workers {
-					if wk.ID == workerID {
-						currentWorker = wk
-						break
-					}
+			// Always delete worker after execution
+			defer func() {
+				if err := pm.workerManager.DeleteEphemeralWorker(ctx, worker); err != nil {
+					logging.Logger().Error("failed to delete ephemeral worker", zap.Error(err))
 				}
+			}()
 
-				if currentWorker == nil {
-					logging.Logger().Error("Worker not found in allocated list", zap.String("worker_id", workerID))
-					return
-				}
+			// Execute pipeline on worker
+			if err := pipeline.ExecuteOnWorker(ctx, worker.Controller, p, chunk); err != nil {
+				logging.Logger().Error("pipeline execution failed on worker",
+					zap.String("worker_name", worker.Name),
+					zap.Error(err))
+				return
+			}
 
-				if err := recon.ExecutePipelineOnWorker(context.Background(), currentWorker.Controller, p, t); err != nil {
-					logging.Logger().Error("Pipeline execution failed on worker",
-						zap.String("worker_id", workerID),
-						zap.Error(err))
-					// We should probably record this error
-				}
-			}(pm.workerManager, worker.ID, chunk)
-		}
+			logging.Logger().Info("ephemeral worker completed successfully",
+				zap.String("worker_name", worker.Name),
+				zap.Int("targets_processed", len(chunk)))
+		})
 	}
 
-	wg.Wait()
+	pool.StopAndWait()
 
 	pm.updateStatus(id, PipelineStatusCompleted, "")
 	logging.Logger().Info("Pipeline execution completed", zap.String("pipeline_id", id))
-
-	// Deallocate workers for this pipeline
-	if err := pm.workerManager.DeallocateWorkers(context.Background(), id); err != nil {
-		logging.Logger().Error("Failed to deallocate workers", zap.String("pipeline_id", id), zap.Error(err))
-	}
 }
 
 func (pm *PipelineManager) updateStatus(id string, status PipelineStatus, errMsg string) {

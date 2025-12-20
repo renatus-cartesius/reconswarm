@@ -7,8 +7,8 @@ import (
 	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
-	"reconswarm/internal/manager"
 	"reconswarm/internal/provisioning"
+	"reconswarm/internal/server/manager"
 	"reconswarm/internal/ssh"
 	"time"
 

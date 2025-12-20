@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"reconswarm/internal/logging"
-	"reconswarm/internal/recon"
+	"reconswarm/internal/recon/targets"
 
 	"go.uber.org/zap"
 
@@ -34,7 +34,7 @@ Example:
 		fmt.Printf("Fetching subdomains for domain: %s\n", domain)
 		fmt.Println("This may take a few seconds...")
 
-		subdomains, err := recon.CrtshDump(domain)
+		subdomains, err := targets.CrtshDump(domain)
 		if err != nil {
 			logging.Logger().Fatal("Failed to dump subdomains",
 				zap.String("domain", domain),

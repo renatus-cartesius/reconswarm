@@ -16,7 +16,8 @@ import (
 func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipeline, workerTargets []string) error {
 	logging.Logger().Info("starting pipeline stages execution",
 		zap.Int("stages_count", len(p.Stages)),
-		zap.Strings("targets", workerTargets))
+		zap.Int("targets_count", len(workerTargets)),
+		zap.Strings("targets_sample", logging.TruncateSlice(workerTargets, 10)))
 
 	// Ensure /opt/recon directory exists
 	logging.Logger().Debug("ensuring /opt/recon directory exists")

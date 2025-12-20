@@ -31,14 +31,6 @@ func escapeNewlines(s string) string {
 	return strings.ReplaceAll(s, "\n", "\\n")
 }
 
-// truncateString truncates a string to maxLen characters
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen]
-}
-
 // safeClose safely closes a resource and logs any errors
 func safeClose(name string, closer func() error) {
 	if err := closer(); err != nil {
@@ -151,18 +143,13 @@ func (s *SSH) Run(command string) error {
 	stdoutStr := stdout.String()
 	stderrStr := stderr.String()
 
-	// Truncate output to 3000 characters for logging
-	const maxLogLength = 3000
-	truncatedStdout := truncateString(stdoutStr, maxLogLength)
-	truncatedStderr := truncateString(stderrStr, maxLogLength)
-
-	// Log structured output with escaped newlines
+	// Log structured output with truncation and escaped newlines
 	logging.Logger().Info("Command executed",
-		zap.String("command", command),
+		zap.String("command", logging.Truncate(command)),
 		zap.String("host", s.host),
 		zap.String("instance_name", s.instanceName),
-		zap.String("stdout", escapeNewlines(truncatedStdout)),
-		zap.String("stderr", escapeNewlines(truncatedStderr)),
+		zap.String("stdout", escapeNewlines(logging.Truncate(stdoutStr))),
+		zap.String("stderr", escapeNewlines(logging.Truncate(stderrStr))),
 		zap.Bool("success", err == nil))
 
 	return err

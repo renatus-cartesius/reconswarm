@@ -76,7 +76,7 @@ line3
 line4
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, _ = w.Write([]byte(content))
 	}))
 	defer server.Close()
 
@@ -105,7 +105,7 @@ target1.com
 target2.com
 `
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, _ = w.Write([]byte(content))
 	}))
 	defer server.Close()
 

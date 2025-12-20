@@ -304,6 +304,94 @@ func (wm *WorkerManager) GetStatus() []*Worker {
 	return status
 }
 
+// CreateEphemeralWorker creates a single worker that is not tracked in the pool.
+// The caller is responsible for calling DeleteEphemeralWorker when done.
+func (wm *WorkerManager) CreateEphemeralWorker(ctx context.Context) (*Worker, error) {
+	name := fmt.Sprintf("reconswarm-%v", uuid.NewString())
+	spec := provisioning.InstanceSpec{
+		Name:         name,
+		Cores:        wm.vmDefaults.Cores,
+		Memory:       wm.vmDefaults.Memory,
+		DiskSize:     wm.vmDefaults.DiskSize,
+		ImageID:      wm.vmDefaults.Image,
+		Zone:         wm.vmDefaults.Zone,
+		SSHPublicKey: wm.sshKeyPair.PublicKey,
+		Username:     wm.vmDefaults.Username,
+	}
+
+	logging.Logger().Info("creating ephemeral worker node",
+		zap.String("name", spec.Name),
+		zap.String("zone", spec.Zone),
+		zap.Int("cores", int(spec.Cores)),
+		zap.Int64("memory_gb", spec.Memory))
+
+	instance, err := wm.provisioner.Create(ctx, spec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create instance: %w", err)
+	}
+
+	// Create controller
+	controlConfig := control.Config{
+		Host:         instance.IP,
+		User:         wm.vmDefaults.Username,
+		PrivateKey:   wm.sshKeyPair.PrivateKey,
+		Timeout:      5 * time.Minute,
+		SSHTimeout:   30 * time.Second,
+		InstanceName: instance.Name,
+	}
+
+	controller, err := wm.ctrlFactory(controlConfig)
+	if err != nil {
+		// Cleanup failed instance
+		if delErr := wm.provisioner.Delete(ctx, instance.ID); delErr != nil {
+			logging.Logger().Error("Failed to delete instance during cleanup", zap.String("instance_id", instance.ID), zap.Error(delErr))
+		}
+		return nil, fmt.Errorf("failed to create controller: %w", err)
+	}
+
+	// Setup VM
+	if err := wm.setupWorker(controller); err != nil {
+		controller.Close()
+		if delErr := wm.provisioner.Delete(ctx, instance.ID); delErr != nil {
+			logging.Logger().Error("Failed to delete instance during cleanup", zap.String("instance_id", instance.ID), zap.Error(delErr))
+		}
+		return nil, fmt.Errorf("failed to setup worker: %w", err)
+	}
+
+	return &Worker{
+		ID:          uuid.NewString(),
+		Name:        instance.Name,
+		IP:          instance.IP,
+		Status:      WorkerStatusBusy,
+		InstanceID:  instance.ID,
+		Controller:  controller,
+		Provisioner: wm.provisioner,
+		LastUsed:    time.Now(),
+	}, nil
+}
+
+// DeleteEphemeralWorker deletes a worker created by CreateEphemeralWorker.
+func (wm *WorkerManager) DeleteEphemeralWorker(ctx context.Context, w *Worker) error {
+	logging.Logger().Info("deleting ephemeral worker node", zap.String("name", w.Name))
+
+	if w.Controller != nil {
+		if err := w.Controller.Close(); err != nil {
+			logging.Logger().Warn("failed to close controller", zap.String("name", w.Name), zap.Error(err))
+		}
+	}
+
+	if err := wm.provisioner.Delete(ctx, w.InstanceID); err != nil {
+		return fmt.Errorf("failed to delete instance: %w", err)
+	}
+
+	return nil
+}
+
+// MaxWorkers returns the maximum number of workers allowed
+func (wm *WorkerManager) MaxWorkers() int {
+	return wm.maxWorkers
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

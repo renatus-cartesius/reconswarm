@@ -1,0 +1,19 @@
+# ReconSwarm Pipeline Example - Ffuf
+# This example demonstrates how to configure a pipeline with ffuf and external wordlist
+
+pipeline:
+  targets:
+    # Example: Load targets from external URL (supports large lists, millions of items)
+    - value: "https://raw.githubusercontent.com/trickest/wordlists/refs/heads/main/inventory/parameters.txt"
+      type: external_list
+  stages:
+    - name: "Run ffuf"
+      type: exec
+      steps:
+        - "sudo mkdir -p /opt/recon/{results,bin} && cd /opt/recon/bin && sudo wget https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_linux_amd64.tar.gz && sudo tar xvf ffuf_2.1.0_linux_amd64.tar.gz"
+        - "cd /opt/recon/bin && sudo ./ffuf -u 'https://cloud-api.somesite.ru/web/v1/data/app/FUZZ' -w {{.Targets.filepath}} -mc 401 -o '/opt/recon/results/ffuf-{{.Worker.Name}}' -of json"
+    # Example: Sync results to the reconswarm server
+    - name: "Sync results"
+      type: sync
+      src: "/opt/recon/results"
+      dest: "/opt/results/{{.Worker.Name}}"

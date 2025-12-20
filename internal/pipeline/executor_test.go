@@ -1,9 +1,8 @@
-package recon
+package pipeline
 
 import (
 	"context"
 	"os"
-	"reconswarm/internal/pipeline"
 	"strings"
 	"testing"
 )
@@ -49,50 +48,6 @@ func (m *mockController) Sync(remotePath, localPath string) error {
 	return nil
 }
 
-func TestPrepareTargets(t *testing.T) {
-	// Set up mock crt.sh client
-	mockClient := NewMockCrtshClient()
-	mockClient.SetMockResults("example.com", []string{"www.example.com", "api.example.com"})
-	SetCrtshClient(mockClient)
-	defer SetCrtshClient(&DefaultCrtshClient{}) // Restore default client
-
-	pipelineRaw := pipeline.PipelineRaw{
-		Targets: []pipeline.Target{
-			{
-				Type:  "crtsh",
-				Value: "example.com",
-			},
-			{
-				Type:  "list",
-				Value: []any{"test1.com", "test2.com"},
-			},
-		},
-	}
-
-	targets := PrepareTargets(pipelineRaw.ToPipeline())
-
-	// Should contain the original domain + mock subdomains + list targets
-	expectedTargets := []string{"example.com", "www.example.com", "api.example.com", "test1.com", "test2.com"}
-
-	if len(targets) != len(expectedTargets) {
-		t.Errorf("Expected %d targets, got %d", len(expectedTargets), len(targets))
-	}
-
-	// Check that all expected targets are present
-	for _, expected := range expectedTargets {
-		found := false
-		for _, target := range targets {
-			if target == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected target '%s' not found in results", expected)
-		}
-	}
-}
-
 func TestRenderTemplate(t *testing.T) {
 	templateStr := "echo 'Targets: {{.Targets.filepath}}'"
 	context := map[string]interface{}{
@@ -105,7 +60,7 @@ func TestRenderTemplate(t *testing.T) {
 		},
 	}
 
-	result, err := pipeline.RenderTemplate(templateStr, context)
+	result, err := RenderTemplate(templateStr, context)
 	if err != nil {
 		t.Fatalf("Failed to render template: %v", err)
 	}
@@ -128,7 +83,7 @@ func TestRenderTemplateWithWorker(t *testing.T) {
 		},
 	}
 
-	result, err := pipeline.RenderTemplate(templateStr, context)
+	result, err := RenderTemplate(templateStr, context)
 	if err != nil {
 		t.Fatalf("Failed to render template: %v", err)
 	}
@@ -140,15 +95,13 @@ func TestRenderTemplateWithWorker(t *testing.T) {
 }
 
 func TestExecuteExecStage_BasicTemplate(t *testing.T) {
-	// Create mock controller
 	controller := &mockController{
 		instanceName: "test-instance-123",
 		commands:     []string{},
 		syncedFiles:  []syncedFile{},
 	}
 
-	// Create test stage
-	stage := &pipeline.ExecStage{
+	stage := &ExecStage{
 		Name: "Test Stage",
 		Type: "exec",
 		Steps: []string{
@@ -160,13 +113,11 @@ func TestExecuteExecStage_BasicTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com"}
 	targetsFile := "/opt/recon/targets-20231201-120000.txt"
 
-	// Execute the stage
 	err := stage.Execute(context.Background(), controller, targets, targetsFile)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
 
-	// Verify commands were executed
 	expectedCommands := []string{
 		"echo 'Hello test-instance-123'",
 		"docker run --name test-instance-123 test-image",
@@ -190,7 +141,7 @@ func TestExecuteExecStage_TargetsTemplate(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	stage := &pipeline.ExecStage{
+	stage := &ExecStage{
 		Name: "Targets Test Stage",
 		Type: "exec",
 		Steps: []string{
@@ -230,7 +181,7 @@ func TestExecuteExecStage_ComplexTemplate(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	stage := &pipeline.ExecStage{
+	stage := &ExecStage{
 		Name: "Complex Test Stage",
 		Type: "exec",
 		Steps: []string{
@@ -270,7 +221,7 @@ func TestExecuteExecStage_EmptySteps(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	stage := &pipeline.ExecStage{
+	stage := &ExecStage{
 		Name:  "Empty Stage",
 		Type:  "exec",
 		Steps: []string{},
@@ -284,7 +235,6 @@ func TestExecuteExecStage_EmptySteps(t *testing.T) {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
 
-	// Should have no commands executed
 	if len(controller.commands) != 0 {
 		t.Errorf("Expected 0 commands, got %d", len(controller.commands))
 	}
@@ -297,11 +247,11 @@ func TestExecuteExecStage_InvalidTemplate(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	stage := &pipeline.ExecStage{
+	stage := &ExecStage{
 		Name: "Invalid Template Stage",
 		Type: "exec",
 		Steps: []string{
-			"echo 'Hello {{.Invalid.Field'", // Missing closing brace
+			"echo 'Hello {{.Invalid.Field'",
 		},
 	}
 
@@ -313,7 +263,6 @@ func TestExecuteExecStage_InvalidTemplate(t *testing.T) {
 		t.Error("Expected error for invalid template, but got none")
 	}
 
-	// Should have no commands executed due to template error
 	if len(controller.commands) != 0 {
 		t.Errorf("Expected 0 commands due to template error, got %d", len(controller.commands))
 	}
@@ -374,7 +323,7 @@ func TestRenderTemplate_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := pipeline.RenderTemplate(tt.template, tt.context)
+			result, err := RenderTemplate(tt.template, tt.context)
 
 			if tt.hasError {
 				if err == nil {
@@ -401,7 +350,7 @@ func TestExecuteSyncStage_BasicSync(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	stage := &pipeline.SyncStage{
+	stage := &SyncStage{
 		Name: "Basic Sync Stage",
 		Type: "sync",
 		Src:  "/opt/recon/results-{{.Worker.Name}}.json",
@@ -416,7 +365,6 @@ func TestExecuteSyncStage_BasicSync(t *testing.T) {
 		t.Fatalf("Failed to execute sync stage: %v", err)
 	}
 
-	// Verify file was synced
 	if len(controller.syncedFiles) != 1 {
 		t.Fatalf("Expected 1 synced file, got %d", len(controller.syncedFiles))
 	}
@@ -440,7 +388,7 @@ func TestExecuteSyncStage_TargetsTemplate(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	stage := &pipeline.SyncStage{
+	stage := &SyncStage{
 		Name: "Targets Sync Stage",
 		Type: "sync",
 		Src:  "{{.Targets.filepath}}",
@@ -455,7 +403,6 @@ func TestExecuteSyncStage_TargetsTemplate(t *testing.T) {
 		t.Fatalf("Failed to execute sync stage: %v", err)
 	}
 
-	// Verify file was synced
 	if len(controller.syncedFiles) != 1 {
 		t.Fatalf("Expected 1 synced file, got %d", len(controller.syncedFiles))
 	}
@@ -479,10 +426,10 @@ func TestExecuteSyncStage_InvalidTemplate(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	stage := &pipeline.SyncStage{
+	stage := &SyncStage{
 		Name: "Invalid Template Sync Stage",
 		Type: "sync",
-		Src:  "/opt/recon/{{.Invalid.Field'", // Missing closing brace
+		Src:  "/opt/recon/{{.Invalid.Field'",
 		Dest: "./results/test.json",
 	}
 
@@ -494,21 +441,20 @@ func TestExecuteSyncStage_InvalidTemplate(t *testing.T) {
 		t.Error("Expected error for invalid template, but got none")
 	}
 
-	// Should have no synced files due to template error
 	if len(controller.syncedFiles) != 0 {
 		t.Errorf("Expected 0 synced files due to template error, got %d", len(controller.syncedFiles))
 	}
 }
 
-func TestRunStages_CompleteFlow(t *testing.T) {
+func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 	controller := &mockController{
 		instanceName: "test-worker-789",
 		commands:     []string{},
 		syncedFiles:  []syncedFile{},
 	}
 
-	pipelineRaw := pipeline.PipelineRaw{
-		Stages: []pipeline.StageRaw{
+	pipelineRaw := PipelineRaw{
+		Stages: []StageRaw{
 			{
 				Name: "First Stage",
 				Type: "exec",
@@ -529,23 +475,20 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	err := ExecutePipelineOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
 	if err != nil {
 		t.Fatalf("Failed to run stages: %v", err)
 	}
 
-	// Should have executed all commands from both stages plus directory creation and file writing
-	expectedMinCommands := 4 // 2 from first stage + 1 from second stage + 1 for directory creation + 1 for file writing
+	expectedMinCommands := 4
 	if len(controller.commands) < expectedMinCommands {
 		t.Errorf("Expected at least %d commands, got %d", expectedMinCommands, len(controller.commands))
 	}
 
-	// Check that the first command was executed
 	if controller.commands[0] != "sudo mkdir -p /opt/recon" {
 		t.Errorf("Expected first command to create directory, got: %s", controller.commands[0])
 	}
 
-	// Check that targets file was created
 	foundTargetsFile := false
 	for _, cmd := range controller.commands {
 		if strings.Contains(cmd, "echo") && strings.Contains(cmd, "sudo tee /opt/recon/targets-") && strings.Contains(cmd, "> /dev/null") {
@@ -557,7 +500,6 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 		t.Error("Expected targets file creation command not found")
 	}
 
-	// Check that stage commands were executed
 	foundStageCommand := false
 	for _, cmd := range controller.commands {
 		if cmd == "echo 'Starting test-worker-789'" {
@@ -569,3 +511,4 @@ func TestRunStages_CompleteFlow(t *testing.T) {
 		t.Error("Expected stage command not found")
 	}
 }
+

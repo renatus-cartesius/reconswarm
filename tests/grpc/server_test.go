@@ -9,7 +9,7 @@ import (
 	"reconswarm/api"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
-	"reconswarm/internal/manager"
+	"reconswarm/internal/server/manager"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/server"
 	"reconswarm/internal/ssh"

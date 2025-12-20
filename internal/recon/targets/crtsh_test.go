@@ -1,28 +1,8 @@
-package recon
+package targets
 
 import (
 	"testing"
 )
-
-// func TestCrtshDump(t *testing.T) {
-// 	// Test with a well-known domain
-// 	domain := "example.com"
-//
-// 	subdomains, err := CrtshDump(domain)
-// 	if err != nil {
-// 		t.Fatalf("CrtshDump failed: %v", err)
-// 	}
-//
-// 	fmt.Printf("Found %d subdomains for %s:\n", len(subdomains), domain)
-// 	for _, subdomain := range subdomains {
-// 		fmt.Printf("  - %s\n", subdomain)
-// 	}
-//
-// 	// Basic validation - we expect some results for a real domain
-// 	if len(subdomains) == 0 {
-// 		t.Logf("Warning: No subdomains found for %s. This might be expected if the domain has no certificates or no resolvable subdomains.", domain)
-// 	}
-// }
 
 func TestMockCrtshClient(t *testing.T) {
 	// Create mock client
@@ -95,27 +75,3 @@ func TestSetCrtshClient(t *testing.T) {
 	}
 }
 
-// func TestCrtshDump_UserAgent(t *testing.T) {
-// 	// This test verifies that the User-Agent header is set correctly
-// 	// We can't easily test the actual HTTP request without mocking, but we can
-// 	// verify that the function doesn't crash and returns expected results
-//
-// 	// Test with a real domain to ensure the User-Agent header works
-// 	domain := "example.com"
-// 	results, err := CrtshDump(domain)
-//
-// 	if err != nil {
-// 		t.Fatalf("CrtshDump failed: %v", err)
-// 	}
-//
-// 	// Should return some results (even if empty)
-// 	if results == nil {
-// 		t.Error("Expected results to be non-nil")
-// 	}
-//
-// 	// Log the results for verification
-// 	t.Logf("Found %d subdomains for %s", len(results), domain)
-// 	for i, subdomain := range results {
-// 		t.Logf("  %d. %s", i+1, subdomain)
-// 	}
-// }

@@ -1,6 +1,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+// mockFile implements io.ReadWriteCloser for testing
+type mockFile struct {
+	bytes.Buffer
+}
+
+func (m *mockFile) Close() error {
+	return nil
+}
 
 // MockProvisioner implements provisioning.Provisioner
 type MockProvisioner struct{}
@@ -54,7 +64,7 @@ func (m *MockController) Run(command string) error {
 }
 
 func (m *MockController) OpenFile(path string, flags int) (io.ReadWriteCloser, error) {
-	return nil, nil
+	return &mockFile{}, nil
 }
 
 func (m *MockController) GetInstanceName() string {

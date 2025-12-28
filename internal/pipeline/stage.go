@@ -70,7 +70,7 @@ func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, target
 			zap.String("template", logging.Truncate(stepTemplate)))
 
 		// Render template
-		renderedCommand, err := renderTemplate(stepTemplate, templateContext)
+		renderedCommand, err := RenderTemplate(stepTemplate, templateContext)
 		if err != nil {
 			return fmt.Errorf("failed to render template for step %d: %w", stepIndex+1, err)
 		}
@@ -105,13 +105,13 @@ func (s *SyncStage) Execute(ctx context.Context, ctrl control.Controller, target
 	}
 
 	// Render source path template
-	renderedSrc, err := renderTemplate(s.Src, templateContext)
+	renderedSrc, err := RenderTemplate(s.Src, templateContext)
 	if err != nil {
 		return fmt.Errorf("failed to render source path template: %w", err)
 	}
 
 	// Render destination path template
-	renderedDest, err := renderTemplate(s.Dest, templateContext)
+	renderedDest, err := RenderTemplate(s.Dest, templateContext)
 	if err != nil {
 		return fmt.Errorf("failed to render destination path template: %w", err)
 	}
@@ -127,21 +127,6 @@ func (s *SyncStage) Execute(ctx context.Context, ctrl control.Controller, target
 
 	logging.Logger().Debug("sync stage completed successfully", zap.String("stage_name", s.Name))
 	return nil
-}
-
-// renderTemplate renders a Go template with the given context
-func renderTemplate(templateStr string, context map[string]interface{}) (string, error) {
-	tmpl, err := template.New("command").Parse(templateStr)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, context); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	return buf.String(), nil
 }
 
 // RenderTemplate renders a Go template with the given context

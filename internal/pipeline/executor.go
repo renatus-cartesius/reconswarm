@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -19,9 +20,9 @@ func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipel
 		zap.Int("targets_count", len(workerTargets)),
 		zap.Strings("targets_sample", logging.TruncateSlice(workerTargets, 10)))
 
-	// Ensure /opt/recon directory exists
+	// Ensure /opt/recon directory exists and is writable
 	logging.Logger().Debug("ensuring /opt/recon directory exists")
-	if err := controller.Run("sudo mkdir -p /opt/recon"); err != nil {
+	if err := controller.Run("sudo mkdir -p /opt/recon && sudo chmod 777 /opt/recon"); err != nil {
 		return fmt.Errorf("failed to create /opt/recon directory: %w", err)
 	}
 
@@ -31,12 +32,8 @@ func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipel
 
 	logging.Logger().Info("creating targets file", zap.String("file", targetsFile))
 
-	// Create targets content
-	targetsContent := strings.Join(workerTargets, "\n")
-
-	// Write targets to file using echo command
-	writeCmd := fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", targetsContent, targetsFile)
-	if err := controller.Run(writeCmd); err != nil {
+	// Write targets to file using SFTP
+	if err := writeTargetsFile(controller, targetsFile, workerTargets); err != nil {
 		return fmt.Errorf("failed to write targets file: %w", err)
 	}
 
@@ -57,4 +54,17 @@ func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipel
 
 	logging.Logger().Info("all pipeline stages completed successfully")
 	return nil
+}
+
+// writeTargetsFile writes targets to a file on the remote host using SFTP
+func writeTargetsFile(controller control.Controller, path string, targets []string) error {
+	f, err := controller.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	content := strings.Join(targets, "\n") + "\n"
+	_, err = f.Write([]byte(content))
+	return err
 }

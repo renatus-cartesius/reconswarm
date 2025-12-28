@@ -1,17 +1,45 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
 )
+
+// mockFile implements io.ReadWriteCloser for testing
+// Uses pointer to Buffer to allow tracking written content
+type mockFile struct {
+	buf    *bytes.Buffer
+	closed bool
+}
+
+func newMockFile(buf *bytes.Buffer) *mockFile {
+	return &mockFile{buf: buf, closed: false}
+}
+
+func (m *mockFile) Read(p []byte) (n int, err error) {
+	return m.buf.Read(p)
+}
+
+func (m *mockFile) Write(p []byte) (n int, err error) {
+	return m.buf.Write(p)
+}
+
+func (m *mockFile) Close() error {
+	m.closed = true
+	return nil
+}
 
 // mockController is a mock implementation of the Controller interface for testing
 type mockController struct {
 	instanceName string
 	commands     []string
 	syncedFiles  []syncedFile
+	writtenFiles map[string]*bytes.Buffer
 }
 
 type syncedFile struct {
@@ -28,12 +56,13 @@ func (m *mockController) Run(command string) error {
 	return nil
 }
 
-func (m *mockController) ReadFile(remotePath string) (string, error) {
-	return "mock file content", nil
-}
-
-func (m *mockController) WriteFile(remotePath, content string, mode os.FileMode) error {
-	return nil
+func (m *mockController) OpenFile(path string, flags int) (io.ReadWriteCloser, error) {
+	if m.writtenFiles == nil {
+		m.writtenFiles = make(map[string]*bytes.Buffer)
+	}
+	buf := &bytes.Buffer{}
+	m.writtenFiles[path] = buf
+	return newMockFile(buf), nil
 }
 
 func (m *mockController) GetInstanceName() string {
@@ -446,6 +475,235 @@ func TestExecuteSyncStage_InvalidTemplate(t *testing.T) {
 	}
 }
 
+// mockControllerWithError is a mock that can return errors
+type mockControllerWithError struct {
+	mockController
+	openFileError error
+	openFileCalls []openFileCall
+}
+
+type openFileCall struct {
+	path  string
+	flags int
+}
+
+func (m *mockControllerWithError) OpenFile(path string, flags int) (io.ReadWriteCloser, error) {
+	m.openFileCalls = append(m.openFileCalls, openFileCall{path: path, flags: flags})
+	if m.openFileError != nil {
+		return nil, m.openFileError
+	}
+	return m.mockController.OpenFile(path, flags)
+}
+
+func TestOpenFile_WriteTargetsFile(t *testing.T) {
+	controller := &mockController{
+		instanceName: "test-worker",
+		commands:     []string{},
+		syncedFiles:  []syncedFile{},
+	}
+
+	targets := []string{"example.com", "test.com", "demo.org"}
+
+	pipelineRaw := PipelineRaw{
+		Stages: []StageRaw{
+			{
+				Name:  "Test",
+				Type:  "exec",
+				Steps: []string{"echo test"},
+			},
+		},
+	}
+
+	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	if err != nil {
+		t.Fatalf("Failed to execute: %v", err)
+	}
+
+	// Verify that OpenFile was called (file was written)
+	if len(controller.writtenFiles) == 0 {
+		t.Fatal("Expected targets file to be written via OpenFile, but no files were written")
+	}
+
+	// Find the targets file and verify content
+	var foundTargetsFile bool
+	for path, buf := range controller.writtenFiles {
+		if len(path) > 0 && buf != nil {
+			content := buf.String()
+			expectedContent := "example.com\ntest.com\ndemo.org\n"
+			if content != expectedContent {
+				t.Errorf("Targets file content mismatch.\nExpected:\n%s\nGot:\n%s", expectedContent, content)
+			}
+			foundTargetsFile = true
+			break
+		}
+	}
+
+	if !foundTargetsFile {
+		t.Error("Targets file was not written correctly via OpenFile")
+	}
+}
+
+func TestOpenFile_ErrorHandling(t *testing.T) {
+	controller := &mockControllerWithError{
+		mockController: mockController{
+			instanceName: "test-worker",
+			commands:     []string{},
+			syncedFiles:  []syncedFile{},
+		},
+		openFileError: fmt.Errorf("mock OpenFile error: permission denied"),
+	}
+
+	targets := []string{"example.com"}
+
+	pipelineRaw := PipelineRaw{
+		Stages: []StageRaw{
+			{
+				Name:  "Test",
+				Type:  "exec",
+				Steps: []string{"echo test"},
+			},
+		},
+	}
+
+	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	if err == nil {
+		t.Fatal("Expected error when OpenFile fails, but got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to write targets file") {
+		t.Errorf("Expected error to contain 'failed to write targets file', got: %v", err)
+	}
+}
+
+func TestOpenFile_CalledWithCorrectFlags(t *testing.T) {
+	controller := &mockControllerWithError{
+		mockController: mockController{
+			instanceName: "test-worker",
+			commands:     []string{},
+			syncedFiles:  []syncedFile{},
+		},
+	}
+
+	targets := []string{"example.com"}
+
+	pipelineRaw := PipelineRaw{
+		Stages: []StageRaw{
+			{
+				Name:  "Test",
+				Type:  "exec",
+				Steps: []string{"echo test"},
+			},
+		},
+	}
+
+	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Verify OpenFile was called with correct flags (O_CREATE | O_WRONLY | O_TRUNC)
+	if len(controller.openFileCalls) == 0 {
+		t.Fatal("Expected OpenFile to be called")
+	}
+
+	call := controller.openFileCalls[0]
+	expectedFlags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	if call.flags != expectedFlags {
+		t.Errorf("OpenFile called with wrong flags. Expected %d (O_CREATE|O_WRONLY|O_TRUNC), got %d", expectedFlags, call.flags)
+	}
+
+	// Verify path starts with /opt/recon/targets-
+	if !strings.HasPrefix(call.path, "/opt/recon/targets-") {
+		t.Errorf("Expected path to start with '/opt/recon/targets-', got: %s", call.path)
+	}
+}
+
+func TestOpenFile_MultipleTargets(t *testing.T) {
+	controller := &mockController{
+		instanceName: "test-worker",
+		commands:     []string{},
+		syncedFiles:  []syncedFile{},
+	}
+
+	// Test with many targets
+	targets := make([]string, 100)
+	for i := 0; i < 100; i++ {
+		targets[i] = fmt.Sprintf("target%d.example.com", i)
+	}
+
+	pipelineRaw := PipelineRaw{
+		Stages: []StageRaw{
+			{
+				Name:  "Test",
+				Type:  "exec",
+				Steps: []string{"echo test"},
+			},
+		},
+	}
+
+	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	if err != nil {
+		t.Fatalf("Failed to execute with many targets: %v", err)
+	}
+
+	// Verify all targets were written
+	if len(controller.writtenFiles) == 0 {
+		t.Fatal("Expected targets file to be written")
+	}
+
+	for _, buf := range controller.writtenFiles {
+		content := buf.String()
+		lines := strings.Split(strings.TrimSpace(content), "\n")
+		if len(lines) != 100 {
+			t.Errorf("Expected 100 targets in file, got %d", len(lines))
+		}
+		break
+	}
+}
+
+func TestOpenFile_SpecialCharactersInTargets(t *testing.T) {
+	controller := &mockController{
+		instanceName: "test-worker",
+		commands:     []string{},
+		syncedFiles:  []syncedFile{},
+	}
+
+	// Targets with special characters that would break shell commands
+	targets := []string{
+		"example.com",
+		"test's-domain.com",
+		"domain-with-$pecial.com",
+		"domain`with`backticks.com",
+		"domain$(command).com",
+	}
+
+	pipelineRaw := PipelineRaw{
+		Stages: []StageRaw{
+			{
+				Name:  "Test",
+				Type:  "exec",
+				Steps: []string{"echo test"},
+			},
+		},
+	}
+
+	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	if err != nil {
+		t.Fatalf("Failed to execute with special characters: %v", err)
+	}
+
+	// Verify content is written correctly without shell interpretation
+	for _, buf := range controller.writtenFiles {
+		content := buf.String()
+		for _, target := range targets {
+			if !strings.Contains(content, target) {
+				t.Errorf("Target '%s' not found in written file. File should handle special characters via OpenFile/SFTP", target)
+			}
+		}
+		break
+	}
+}
+
 func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 	controller := &mockController{
 		instanceName: "test-worker-789",
@@ -480,24 +738,15 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 		t.Fatalf("Failed to run stages: %v", err)
 	}
 
-	expectedMinCommands := 4
-	if len(controller.commands) < expectedMinCommands {
-		t.Errorf("Expected at least %d commands, got %d", expectedMinCommands, len(controller.commands))
+	// Check first command creates directory with proper permissions
+	expectedFirstCmd := "sudo mkdir -p /opt/recon && sudo chmod 777 /opt/recon"
+	if controller.commands[0] != expectedFirstCmd {
+		t.Errorf("Expected first command '%s', got: %s", expectedFirstCmd, controller.commands[0])
 	}
 
-	if controller.commands[0] != "sudo mkdir -p /opt/recon" {
-		t.Errorf("Expected first command to create directory, got: %s", controller.commands[0])
-	}
-
-	foundTargetsFile := false
-	for _, cmd := range controller.commands {
-		if strings.Contains(cmd, "echo") && strings.Contains(cmd, "sudo tee /opt/recon/targets-") && strings.Contains(cmd, "> /dev/null") {
-			foundTargetsFile = true
-			break
-		}
-	}
-	if !foundTargetsFile {
-		t.Error("Expected targets file creation command not found")
+	// Check targets file was written via OpenFile (not via shell command)
+	if len(controller.writtenFiles) == 0 {
+		t.Error("Expected targets file to be written via OpenFile")
 	}
 
 	foundStageCommand := false
@@ -511,4 +760,3 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 		t.Error("Expected stage command not found")
 	}
 }
-

@@ -3,6 +3,7 @@ package control
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -18,12 +19,12 @@ import (
 
 // SSH represents an SSH connection and provides methods for remote operations
 type SSH struct {
-	client         *ssh.Client
-	host           string
-	user           string
-	instanceName   string
-	privateKeyPath string
-	timeout        time.Duration
+	client       *ssh.Client
+	sftpClient   *sftp.Client
+	host         string
+	user         string
+	instanceName string
+	timeout      time.Duration
 }
 
 // escapeNewlines escapes newline characters for proper log formatting
@@ -95,18 +96,28 @@ func NewSSH(config SSHConfig) (*SSH, error) {
 		zap.String("host", config.Host),
 		zap.String("instance_name", config.InstanceName))
 
+	// Create SFTP client
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		client.Close()
+		return nil, fmt.Errorf("failed to create SFTP client: %w", err)
+	}
+
 	return &SSH{
-		client:         client,
-		host:           config.Host,
-		user:           config.User,
-		instanceName:   config.InstanceName,
-		privateKeyPath: config.PrivateKey,
-		timeout:        config.Timeout,
+		client:       client,
+		sftpClient:   sftpClient,
+		host:         config.Host,
+		user:         config.User,
+		instanceName: config.InstanceName,
+		timeout:      config.Timeout,
 	}, nil
 }
 
-// Close closes the SSH connection
+// Close closes the SFTP and SSH connections
 func (s *SSH) Close() error {
+	if s.sftpClient != nil {
+		safeClose("SFTP client", s.sftpClient.Close)
+	}
 	if s.client != nil {
 		return s.client.Close()
 	}
@@ -132,7 +143,7 @@ func (s *SSH) Run(command string) error {
 	session.Stderr = &stderr
 
 	logging.Logger().Debug("Executing command",
-		zap.String("command", command),
+		zap.String("command", logging.Truncate(command)),
 		zap.String("host", s.host),
 		zap.String("instance_name", s.instanceName))
 
@@ -155,56 +166,20 @@ func (s *SSH) Run(command string) error {
 	return err
 }
 
-// WriteFile writes content to a file on the remote host
-func (s *SSH) WriteFile(remotePath, content string, mode os.FileMode) error {
-	// Create a temporary file locally
-	tempFile, err := os.CreateTemp("", "ssh_write_*")
+// OpenFile opens a remote file for reading and/or writing.
+// Uses standard os flags: os.O_RDONLY, os.O_WRONLY, os.O_RDWR, os.O_CREATE, os.O_TRUNC, etc.
+func (s *SSH) OpenFile(path string, flags int) (io.ReadWriteCloser, error) {
+	file, err := s.sftpClient.OpenFile(path, flags)
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tempFileName := tempFile.Name()
-	defer func() {
-		if err := os.Remove(tempFileName); err != nil {
-			logging.Logger().Warn("failed to remove temp file",
-				zap.String("file", tempFileName),
-				zap.Error(err))
-		}
-	}()
-
-	// Write content to temp file
-	if err := os.WriteFile(tempFileName, []byte(content), mode); err != nil {
-		return fmt.Errorf("failed to write to temp file: %w", err)
+		return nil, fmt.Errorf("failed to open remote file %s: %w", path, err)
 	}
 
-	// Write file using echo and redirection
-	command := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", remotePath, string(content))
-	return s.Run(command)
-}
+	logging.Logger().Debug("Opened remote file",
+		zap.String("path", path),
+		zap.Int("flags", flags),
+		zap.String("host", s.host))
 
-// ReadFile reads a file from the remote host
-func (s *SSH) ReadFile(remotePath string) (string, error) {
-	session, err := s.client.NewSession()
-	if err != nil {
-		return "", fmt.Errorf("failed to create session: %w", err)
-	}
-	defer safeClose("SSH session", session.Close)
-
-	logging.Logger().Debug("Reading file",
-		zap.String("path", remotePath),
-		zap.String("host", s.host),
-		zap.String("instance_name", s.instanceName))
-
-	output, err := session.CombinedOutput(fmt.Sprintf("cat %s", remotePath))
-	outputStr := string(output)
-
-	// Log structured output with escaped newlines
-	logging.Logger().Info("File read",
-		zap.String("path", remotePath),
-		zap.String("host", s.host),
-		zap.String("instance_name", s.instanceName),
-		zap.Bool("success", err == nil))
-
-	return outputStr, err
+	return file, nil
 }
 
 // Sync copies a file or directory from remote host to local machine using SFTP.
@@ -216,34 +191,27 @@ func (s *SSH) Sync(remotePath, localPath string) error {
 		zap.String("host", s.host),
 		zap.String("instance_name", s.instanceName))
 
-	// Create SFTP client
-	sftpClient, err := sftp.NewClient(s.client)
-	if err != nil {
-		return fmt.Errorf("failed to create SFTP client: %w", err)
-	}
-	defer safeClose("SFTP client", sftpClient.Close)
-
 	// Get remote file info to determine if it's a directory or file
-	remoteInfo, err := sftpClient.Stat(remotePath)
+	remoteInfo, err := s.sftpClient.Stat(remotePath)
 	if err != nil {
 		return fmt.Errorf("failed to stat remote path: %w", err)
 	}
 
 	if remoteInfo.IsDir() {
-		return s.syncDirectory(sftpClient, remotePath, localPath)
+		return s.syncDirectory(remotePath, localPath)
 	}
-	return s.syncFile(sftpClient, remotePath, localPath, remoteInfo)
+	return s.syncFile(remotePath, localPath, remoteInfo)
 }
 
-// copyFile copies a single file from remote to local (internal helper used by both syncFile and syncDirectory)
-func (s *SSH) copyFile(sftpClient *sftp.Client, remotePath, localPath string, fileMode os.FileMode) (int64, error) {
+// copyFile copies a single file from remote to local
+func (s *SSH) copyFile(remotePath, localPath string, fileMode os.FileMode) (int64, error) {
 	// Create parent directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 		return 0, fmt.Errorf("failed to create local directory: %w", err)
 	}
 
 	// Open remote file
-	remoteFile, err := sftpClient.Open(remotePath)
+	remoteFile, err := s.sftpClient.Open(remotePath)
 	if err != nil {
 		return 0, fmt.Errorf("failed to open remote file: %w", err)
 	}
@@ -273,8 +241,8 @@ func (s *SSH) copyFile(sftpClient *sftp.Client, remotePath, localPath string, fi
 }
 
 // syncFile copies a single file from remote to local
-func (s *SSH) syncFile(sftpClient *sftp.Client, remotePath, localPath string, remoteInfo os.FileInfo) error {
-	bytesWritten, err := s.copyFile(sftpClient, remotePath, localPath, remoteInfo.Mode())
+func (s *SSH) syncFile(remotePath, localPath string, remoteInfo os.FileInfo) error {
+	bytesWritten, err := s.copyFile(remotePath, localPath, remoteInfo.Mode())
 	if err != nil {
 		return err
 	}
@@ -290,7 +258,7 @@ func (s *SSH) syncFile(sftpClient *sftp.Client, remotePath, localPath string, re
 }
 
 // syncDirectory recursively copies a directory from remote to local
-func (s *SSH) syncDirectory(sftpClient *sftp.Client, remotePath, localPath string) error {
+func (s *SSH) syncDirectory(remotePath, localPath string) error {
 	// Create root local directory
 	if err := os.MkdirAll(localPath, 0755); err != nil {
 		return fmt.Errorf("failed to create local directory: %w", err)
@@ -301,7 +269,7 @@ func (s *SSH) syncDirectory(sftpClient *sftp.Client, remotePath, localPath strin
 	var totalBytes int64
 
 	// Walk through remote directory recursively
-	walker := sftpClient.Walk(remotePath)
+	walker := s.sftpClient.Walk(remotePath)
 	for walker.Step() {
 		if err := walker.Err(); err != nil {
 			return fmt.Errorf("failed to walk remote directory: %w", err)
@@ -333,7 +301,7 @@ func (s *SSH) syncDirectory(sftpClient *sftp.Client, remotePath, localPath strin
 			dirsCreated++
 		} else {
 			// Copy file using shared helper function
-			bytesWritten, err := s.copyFile(sftpClient, remoteFilePath, localFilePath, info.Mode())
+			bytesWritten, err := s.copyFile(remoteFilePath, localFilePath, info.Mode())
 			if err != nil {
 				return err
 			}

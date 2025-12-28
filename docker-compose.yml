@@ -24,7 +24,7 @@ services:
       - YC_CLOUD_ID=${YC_CLOUD_ID}
     volumes:
       - ./reconswarm.yaml:/app/reconswarm.yaml:ro
-      - ./results:/opt/results
+      - ./results:/app/results
     depends_on:
       - etcd
 

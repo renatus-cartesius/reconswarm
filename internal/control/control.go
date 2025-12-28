@@ -1,7 +1,7 @@
 package control
 
 import (
-	"os"
+	"io"
 	"time"
 )
 
@@ -13,17 +13,16 @@ type Controller interface {
 	// Run executes a command on the remote host
 	Run(command string) error
 
-	// ReadFile reads a file from the remote host
-	ReadFile(remotePath string) (string, error)
-
-	// WriteFile writes content to a file on the remote host
-	WriteFile(remotePath, content string, mode os.FileMode) error
+	// OpenFile opens a remote file for reading and/or writing.
+	// Uses standard os flags: os.O_RDONLY, os.O_WRONLY, os.O_RDWR, os.O_CREATE, os.O_TRUNC, etc.
+	// Caller must close the returned file.
+	OpenFile(path string, flags int) (io.ReadWriteCloser, error)
 
 	// GetInstanceName returns the instance name
 	GetInstanceName() string
 
-	// Sync copies a file or directory from remote host to local machine using SFTP.
-	// Automatically detects whether the path is a file or directory and handles accordingly.
+	// Sync copies a file or directory from remote host to local machine.
+	// Automatically detects whether the path is a file or directory.
 	Sync(remotePath, localPath string) error
 }
 
@@ -31,8 +30,8 @@ type Controller interface {
 type Config struct {
 	Host           string
 	User           string
-	PrivateKey     string        // PEM-encoded private key content (preferred)
-	PrivateKeyPath string        // Path to private key file (deprecated, use PrivateKey)
+	PrivateKey     string // PEM-encoded private key content (preferred)
+	PrivateKeyPath string // Path to private key file (deprecated, use PrivateKey)
 	Timeout        time.Duration
 	SSHTimeout     time.Duration
 	InstanceName   string

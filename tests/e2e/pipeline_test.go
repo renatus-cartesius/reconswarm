@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/provisioning"
@@ -53,12 +53,8 @@ func (m *MockController) Run(command string) error {
 	return nil
 }
 
-func (m *MockController) ReadFile(remotePath string) (string, error) {
-	return "", nil
-}
-
-func (m *MockController) WriteFile(remotePath, content string, mode os.FileMode) error {
-	return nil
+func (m *MockController) OpenFile(path string, flags int) (io.ReadWriteCloser, error) {
+	return nil, nil
 }
 
 func (m *MockController) GetInstanceName() string {

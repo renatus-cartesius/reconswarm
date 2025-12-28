@@ -1,17 +1,27 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
-	"os"
-	"strings"
+	"io"
 	"testing"
 )
+
+// mockFile implements io.ReadWriteCloser for testing
+type mockFile struct {
+	bytes.Buffer
+}
+
+func (m *mockFile) Close() error {
+	return nil
+}
 
 // mockController is a mock implementation of the Controller interface for testing
 type mockController struct {
 	instanceName string
 	commands     []string
 	syncedFiles  []syncedFile
+	writtenFiles map[string]*bytes.Buffer
 }
 
 type syncedFile struct {
@@ -28,12 +38,13 @@ func (m *mockController) Run(command string) error {
 	return nil
 }
 
-func (m *mockController) ReadFile(remotePath string) (string, error) {
-	return "mock file content", nil
-}
-
-func (m *mockController) WriteFile(remotePath, content string, mode os.FileMode) error {
-	return nil
+func (m *mockController) OpenFile(path string, flags int) (io.ReadWriteCloser, error) {
+	if m.writtenFiles == nil {
+		m.writtenFiles = make(map[string]*bytes.Buffer)
+	}
+	buf := &bytes.Buffer{}
+	m.writtenFiles[path] = buf
+	return &mockFile{Buffer: *buf}, nil
 }
 
 func (m *mockController) GetInstanceName() string {
@@ -480,24 +491,15 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 		t.Fatalf("Failed to run stages: %v", err)
 	}
 
-	expectedMinCommands := 4
-	if len(controller.commands) < expectedMinCommands {
-		t.Errorf("Expected at least %d commands, got %d", expectedMinCommands, len(controller.commands))
+	// Check first command creates directory with proper permissions
+	expectedFirstCmd := "sudo mkdir -p /opt/recon && sudo chmod 777 /opt/recon"
+	if controller.commands[0] != expectedFirstCmd {
+		t.Errorf("Expected first command '%s', got: %s", expectedFirstCmd, controller.commands[0])
 	}
 
-	if controller.commands[0] != "sudo mkdir -p /opt/recon" {
-		t.Errorf("Expected first command to create directory, got: %s", controller.commands[0])
-	}
-
-	foundTargetsFile := false
-	for _, cmd := range controller.commands {
-		if strings.Contains(cmd, "echo") && strings.Contains(cmd, "sudo tee /opt/recon/targets-") && strings.Contains(cmd, "> /dev/null") {
-			foundTargetsFile = true
-			break
-		}
-	}
-	if !foundTargetsFile {
-		t.Error("Expected targets file creation command not found")
+	// Check targets file was written via OpenFile (not via shell command)
+	if len(controller.writtenFiles) == 0 {
+		t.Error("Expected targets file to be written via OpenFile")
 	}
 
 	foundStageCommand := false
@@ -511,4 +513,3 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 		t.Error("Expected stage command not found")
 	}
 }
-

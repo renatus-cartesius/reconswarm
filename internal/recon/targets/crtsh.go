@@ -6,11 +6,11 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"reconswarm/internal/logging"
 
 	"go.uber.org/zap"
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 // CrtshResult represents a single certificate entry from crt.sh
@@ -87,13 +87,13 @@ func CrtshDump(domain string) ([]string, error) {
 	logging.Logger().Debug("Constructed crt.sh URL", zap.String("url", url))
 
 	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	client := retryablehttp.NewClient()
+	client.RetryMax = 10
+	client.Backoff = retryablehttp.LinearJitterBackoff
 
 	// Create HTTP request with User-Agent header
 	logging.Logger().Debug("Making HTTP request to crt.sh")
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := retryablehttp.NewRequest("GET", url, nil)
 	if err != nil {
 		logging.Logger().Error("Failed to create HTTP request", zap.Error(err))
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)

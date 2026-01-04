@@ -456,6 +456,15 @@ task ci         # Run all CI checks
 
 ## TODO
 
+### Additional Target Sources
+
+- [ ] Add passing targets from evaluating shell(for using cook, radamsa or literally all available tools):
+    - [ ] evaluating targets on client and pass through grpc call (overheaded by network on big inputs)
+    - [ ] evaluating on server (need to use dependencies in server environment)
+- [ ] Add DNSDumpster target source
+- [ ] Add Censys target source
+- [ ] Add Shodan target source
+
 ### Stateful runs
 
 - [ ] Add save of run state
@@ -481,7 +490,7 @@ task ci         # Run all CI checks
 ### Daemon Mode with Scheduled Execution
 
 - [ ] Implement scheduled execution with cron-like expressions
-- [ ] Add continuous monitoring mode for long-running processes
+- [x] Add continuous monitoring mode for long-running processes
 - [ ] Add event-driven triggers (webhooks, external events)
 - [ ] Implement result persistence and execution history tracking
 - [ ] Add built-in health checks and automatic recovery
@@ -494,17 +503,6 @@ task ci         # Run all CI checks
 - [ ] Add API endpoint integration (custom HTTP POST)
 - [ ] Add email notification support with attachments
 - [ ] Add cloud logging integration (CloudWatch, Stackdriver, etc.)
-
-### Additional Target Sources
-
-- [ ] Add DNSDumpster target source
-- [ ] Add Censys target source
-- [ ] Add Shodan target source
-- [ ] Add ZoomEye target source
-- [ ] Add SecurityTrails target source
-- [ ] Add PassiveTotal target source
-- [ ] Add VirusTotal target source
-- [ ] Add additional reconnaissance data sources
 
 ## License
 

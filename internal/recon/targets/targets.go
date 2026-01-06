@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
 
 	"reconswarm/internal/logging"
@@ -68,6 +70,24 @@ func FromExternalList(url string) ([]string, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading external list: %w", err)
 	}
+
+	return targets, nil
+}
+
+// FromShellOutput executes shell command locally on the server and returns stdout line by line.
+func FromShellOutput(cmd string) ([]string, error) {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	logging.Logger().Debug("running command for shell_output target", zap.String("command", cmd))
+	out, err := exec.Command(shell, "-c", cmd).Output()
+	if err != nil {
+		return nil, err
+	}
+
+	targets := strings.Split(strings.TrimSpace(string(out)), "\n")
 
 	return targets, nil
 }

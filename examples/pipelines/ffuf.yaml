@@ -4,8 +4,10 @@
 pipeline:
   targets:
     # Example: Load targets from external URL (supports large lists, millions of items)
-    - value: "https://raw.githubusercontent.com/trickest/wordlists/refs/heads/main/inventory/parameters.txt"
-      type: external_list
+    # - value: "https://raw.githubusercontent.com/trickest/wordlists/refs/heads/main/inventory/parameters.txt"
+    #   type: external_list
+    - value: "cook / brutas-verbs-all.txt -server- seclists-api-endpoints-res.txt"
+      type: shell_output
   stages:
     - name: "Run ffuf"
       type: exec

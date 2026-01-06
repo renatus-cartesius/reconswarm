@@ -120,6 +120,22 @@ func CompileTargets(p Pipeline) []string {
 			result = append(result, t...)
 			logging.Logger().Info("loaded external list", zap.String("url", url), zap.Int("count", len(t)))
 
+		case "shell_output":
+			cmd, ok := target.Value.(string)
+			if !ok {
+				logging.Logger().Error("invalid type for shell_output target, expected command string", zap.Any("value", target.Value))
+				continue
+			}
+
+			t, err := targets.FromShellOutput(cmd)
+			if err != nil {
+				logging.Logger().Error("error on running command for shell_output", zap.String("command", cmd), zap.Error(err))
+				continue
+			}
+
+			result = append(result, t...)
+			logging.Logger().Info("loaded output from shell command", zap.Int("count", len(t)))
+
 		default:
 			logging.Logger().Error("unknown target type", zap.String("type", target.Type))
 		}

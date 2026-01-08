@@ -8,16 +8,11 @@ ReconSwarm is suitable for bug bounty hunters, penetration testers, DevSecOps en
 
 ## Features
 
-- **Cloud-agnostic architecture** — Provisioner interface with discriminated union pattern allows easy integration with multiple cloud providers (currently Yandex Cloud)
-- **Flexible pipeline stages** — Extensible stage system supporting exec (command execution) and sync (file and directory synchronization) operations
-- **Parallel execution** — Distributes reconnaissance tasks across multiple worker VMs with configurable concurrency
-- **Automatic lifecycle management** — VM provisioning, setup, execution, and cleanup handled automatically
-- **Template-based configuration** — Go templates for dynamic command and path generation
-- **Multiple target types** — Support for crt.sh enumeration and manual target lists
-- **Stateless server** — Server stores no local state; all data persisted in etcd for fault tolerance
-- **Horizontal scalability** — Run multiple server instances behind a load balancer
-- **gRPC API** — Server mode with gRPC interface for pipeline submission and status monitoring
-- **Config-driven** — All server settings configured via YAML file with environment variable support
+- **Dividing targets for parallel execution** — The final compiled targets list is divided among workers for reconnaissance tasks parallel execution
+- **Multiple target types** — Targets list consists of multiple element types: domains from crt.sh response, external list (HTTP/HTTPS URLs), simple list (inline YAML arrays), and shell command output, which is very flexible to use with any tools (cook, shodan, gau, katana, and so on).
+- **Cloud-agnostic architecture** — Allows easy integration with multiple cloud providers (currently supports only Yandex Cloud)
+- **Flexible pipeline stages** — Extensible stage system currently supporting exec (command execution) and sync (file and directory synchronization) operations
+- **Template context in steps** — Flexible way to pass metadata from execution context to steps
 
 ## Architecture
 

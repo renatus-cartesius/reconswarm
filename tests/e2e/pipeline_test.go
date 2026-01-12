@@ -9,7 +9,7 @@ import (
 	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
-	"reconswarm/internal/control/provisioning"
+	"reconswarm/internal/provisioning"
 	"reconswarm/internal/server/manager"
 	"reconswarm/internal/ssh"
 	"strings"

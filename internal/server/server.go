@@ -8,7 +8,7 @@ import (
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
-	"reconswarm/internal/control/provisioning"
+	"reconswarm/internal/provisioning"
 	"reconswarm/internal/server/manager"
 	"reconswarm/internal/ssh"
 

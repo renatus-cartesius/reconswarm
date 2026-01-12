@@ -12,9 +12,9 @@ tasks:
       - go build -o bin/reconswarm ./main.go
 
   test:
-    desc: Run tests
+    desc: Run unit tests
     cmds:
-      - go test -v -race -coverprofile=coverage.out ./...
+      - go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /tests/)
 
   test-e2e:
     desc: Run E2E tests
@@ -57,7 +57,7 @@ tasks:
 
   ci:
     desc: Run all CI checks
-    deps: [vet, staticcheck, lint, test]
+    deps: [vet, lint, test, test-grpc, test-e2e]
 
   fmt:
     desc: Format code

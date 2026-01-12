@@ -6,7 +6,7 @@ import (
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
-	"reconswarm/internal/provisioning"
+	"reconswarm/internal/control/provisioning"
 	"reconswarm/internal/ssh"
 	"sync"
 	"time"

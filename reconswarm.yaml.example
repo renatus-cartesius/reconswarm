@@ -20,7 +20,7 @@ etcd:
 
 # =============================================================================
 # Cloud Provisioner Configuration (Discriminated Union)
-# Currently supported types: yandex_cloud
+# Currently supported types: yandex_cloud, gcp, aws, digitalocean
 # =============================================================================
 provisioner:
   type: yandex_cloud
@@ -34,13 +34,52 @@ provisioner:
 
     # Default VM settings
     default_zone: "ru-central1-b"
-    default_image: "fd8b1cmhmncn7lt4tqn4"  # YC image optimized for containers
-    default_username: "root"
+    default_image: "fd8b1cmhmncn7lt4tqn4"  # Ubuntu 24.04 LTS
+    default_username: "reconswarm"
 
     # VM resources
     default_cores: 2
     default_memory: 2     # GB
     default_disk_size: 20 # GB
+
+  # Google Cloud specific configuration
+  # Active when type: gcp
+  # gcp:
+  #   project_id: "${GCP_PROJECT_ID}"
+  #   credentials_path: "${GCP_CREDENTIALS_PATH}" # Path to Google Cloud credentials JSON file
+  # 
+  #   default_zone: "us-central1-a"
+  #   default_image: "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts"
+  #   default_username: "reconswarm"
+  #   default_cores: 2
+  #   default_memory: 4
+  #   default_disk_size: 20
+
+  # AWS specific configuration
+  # Active when type: aws
+  # aws:
+  #   region: "us-east-1"
+  #   access_key_id: "${AWS_ACCESS_KEY_ID}"
+  #   secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+  # 
+  #   default_zone: "us-east-1a"
+  #   default_image: "ami-04e601abe3e1a910f" # Ubuntu 24.04 LTS (Update to current)
+  #   default_username: "ubuntu"
+  #   default_cores: 2
+  #   default_memory: 4
+  #   default_disk_size: 20
+
+  # DigitalOcean specific configuration
+  # Active when type: digitalocean
+  # digitalocean:
+  #   token: "${DO_TOKEN}"
+  # 
+  #   default_region: "nyc1"
+  #   default_image: "ubuntu-24-04-x64"
+  #   default_username: "reconswarm"
+  #   default_cores: 1
+  #   default_memory: 2
+  #   default_disk_size: 20
 
 # =============================================================================
 # Worker Pool Settings

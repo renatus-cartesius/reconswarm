@@ -3,7 +3,6 @@ package provisioning
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"google.golang.org/api/compute/v1"
@@ -20,11 +19,7 @@ type GCPProvisioner struct {
 func NewGCPProvisioner(ctx context.Context, projectID string, credentialsFile string) (*GCPProvisioner, error) {
 	var opts []option.ClientOption
 	if credentialsFile != "" {
-		data, err := os.ReadFile(credentialsFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read credentials file: %w", err)
-		}
-		opts = append(opts, option.WithCredentialsJSON(data))
+		opts = append(opts, option.WithAuthCredentialsFile(option.ServiceAccount, credentialsFile))
 	}
 
 	service, err := compute.NewService(ctx, opts...)

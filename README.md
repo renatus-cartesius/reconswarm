@@ -8,6 +8,8 @@ ReconSwarm is suitable for bug bounty hunters, penetration testers, DevSecOps en
 
 ## Features
 
+![Targets flow](targets.png)
+
 - **Dividing targets for parallel execution** — The final compiled targets list is divided among workers for reconnaissance tasks parallel execution
 - **Multiple target types** — Targets list consists of multiple element types: domains from crt.sh response, external list (HTTP/HTTPS URLs), simple list (inline YAML arrays), and shell command output, which is very flexible to use with any tools (cook, shodan, gau, katana, and so on).
 - **Cloud-agnostic architecture** — Allows easy integration with multiple cloud providers (currently supports only Yandex Cloud)

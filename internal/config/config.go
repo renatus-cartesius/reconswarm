@@ -39,15 +39,21 @@ type WorkersConfig struct {
 // ProvisionerConfig uses discriminated union pattern.
 // Type field determines which provider config is active.
 type ProvisionerConfig struct {
-	Type        ProviderType       `yaml:"type"`
-	YandexCloud *YandexCloudConfig `yaml:"yandex_cloud,omitempty"`
+	Type         ProviderType        `yaml:"type"`
+	YandexCloud  *YandexCloudConfig  `yaml:"yandex_cloud,omitempty"`
+	GCP          *GCPConfig          `yaml:"gcp,omitempty"`
+	AWS          *AWSConfig          `yaml:"aws,omitempty"`
+	DigitalOcean *DigitalOceanConfig `yaml:"digitalocean,omitempty"`
 }
 
 // ProviderType represents supported cloud providers
 type ProviderType string
 
 const (
-	ProviderYandexCloud ProviderType = "yandex_cloud"
+	ProviderYandexCloud  ProviderType = "yandex_cloud"
+	ProviderGCP          ProviderType = "gcp"
+	ProviderAWS          ProviderType = "aws"
+	ProviderDigitalOcean ProviderType = "digitalocean"
 )
 
 // YandexCloudConfig contains Yandex Cloud specific settings
@@ -65,6 +71,48 @@ type YandexCloudConfig struct {
 	DefaultDiskSize int64  `yaml:"default_disk_size"` // GB
 }
 
+// GCPConfig contains Google Cloud specific settings
+type GCPConfig struct {
+	ProjectID       string `yaml:"project_id"`
+	CredentialsPath string `yaml:"credentials_path"`
+
+	// VM defaults
+	DefaultZone     string `yaml:"default_zone"`
+	DefaultImage    string `yaml:"default_image"`
+	DefaultUsername string `yaml:"default_username"`
+	DefaultCores    int    `yaml:"default_cores"`
+	DefaultMemory   int64  `yaml:"default_memory"`    // GB
+	DefaultDiskSize int64  `yaml:"default_disk_size"` // GB
+}
+
+// AWSConfig contains AWS specific settings
+type AWSConfig struct {
+	Region          string `yaml:"region"`
+	AccessKeyID     string `yaml:"access_key_id"`
+	SecretAccessKey string `yaml:"secret_access_key"`
+
+	// VM defaults
+	DefaultZone     string `yaml:"default_zone"`
+	DefaultImage    string `yaml:"default_image"`
+	DefaultUsername string `yaml:"default_username"`
+	DefaultCores    int    `yaml:"default_cores"`
+	DefaultMemory   int64  `yaml:"default_memory"`    // GB
+	DefaultDiskSize int64  `yaml:"default_disk_size"` // GB
+}
+
+// DigitalOceanConfig contains DigitalOcean specific settings
+type DigitalOceanConfig struct {
+	Token string `yaml:"token"`
+
+	// VM defaults
+	DefaultRegion   string `yaml:"default_region"`
+	DefaultImage    string `yaml:"default_image"`
+	DefaultUsername string `yaml:"default_username"`
+	DefaultCores    int    `yaml:"default_cores"`
+	DefaultMemory   int64  `yaml:"default_memory"`    // GB
+	DefaultDiskSize int64  `yaml:"default_disk_size"` // GB
+}
+
 // Validate validates the provisioner configuration
 func (p *ProvisionerConfig) Validate() error {
 	switch p.Type {
@@ -73,6 +121,21 @@ func (p *ProvisionerConfig) Validate() error {
 			return fmt.Errorf("yandex_cloud config required when type is '%s'", ProviderYandexCloud)
 		}
 		return p.YandexCloud.Validate()
+	case ProviderGCP:
+		if p.GCP == nil {
+			return fmt.Errorf("gcp config required when type is '%s'", ProviderGCP)
+		}
+		return p.GCP.Validate()
+	case ProviderAWS:
+		if p.AWS == nil {
+			return fmt.Errorf("aws config required when type is '%s'", ProviderAWS)
+		}
+		return p.AWS.Validate()
+	case ProviderDigitalOcean:
+		if p.DigitalOcean == nil {
+			return fmt.Errorf("digitalocean config required when type is '%s'", ProviderDigitalOcean)
+		}
+		return p.DigitalOcean.Validate()
 	case "":
 		return fmt.Errorf("provisioner type is required")
 	default:
@@ -87,6 +150,30 @@ func (c *YandexCloudConfig) Validate() error {
 	}
 	if c.FolderID == "" {
 		return fmt.Errorf("yandex_cloud.folder_id is required")
+	}
+	return nil
+}
+
+// Validate validates GCP configuration
+func (c *GCPConfig) Validate() error {
+	if c.ProjectID == "" {
+		return fmt.Errorf("gcp.project_id is required")
+	}
+	return nil
+}
+
+// Validate validates AWS configuration
+func (c *AWSConfig) Validate() error {
+	if c.Region == "" {
+		return fmt.Errorf("aws.region is required")
+	}
+	return nil
+}
+
+// Validate validates DigitalOcean configuration
+func (c *DigitalOceanConfig) Validate() error {
+	if c.Token == "" {
+		return fmt.Errorf("digitalocean.token is required")
 	}
 	return nil
 }
@@ -167,6 +254,30 @@ func (c *Config) expandEnvVars() {
 		yc.DefaultZone = os.ExpandEnv(yc.DefaultZone)
 		yc.DefaultImage = os.ExpandEnv(yc.DefaultImage)
 		yc.DefaultUsername = os.ExpandEnv(yc.DefaultUsername)
+	}
+	if c.Provisioner.GCP != nil {
+		gcp := c.Provisioner.GCP
+		gcp.ProjectID = os.ExpandEnv(gcp.ProjectID)
+		gcp.CredentialsPath = os.ExpandEnv(gcp.CredentialsPath)
+		gcp.DefaultZone = os.ExpandEnv(gcp.DefaultZone)
+		gcp.DefaultImage = os.ExpandEnv(gcp.DefaultImage)
+		gcp.DefaultUsername = os.ExpandEnv(gcp.DefaultUsername)
+	}
+	if c.Provisioner.AWS != nil {
+		aws := c.Provisioner.AWS
+		aws.Region = os.ExpandEnv(aws.Region)
+		aws.AccessKeyID = os.ExpandEnv(aws.AccessKeyID)
+		aws.SecretAccessKey = os.ExpandEnv(aws.SecretAccessKey)
+		aws.DefaultZone = os.ExpandEnv(aws.DefaultZone)
+		aws.DefaultImage = os.ExpandEnv(aws.DefaultImage)
+		aws.DefaultUsername = os.ExpandEnv(aws.DefaultUsername)
+	}
+	if c.Provisioner.DigitalOcean != nil {
+		do := c.Provisioner.DigitalOcean
+		do.Token = os.ExpandEnv(do.Token)
+		do.DefaultRegion = os.ExpandEnv(do.DefaultRegion)
+		do.DefaultImage = os.ExpandEnv(do.DefaultImage)
+		do.DefaultUsername = os.ExpandEnv(do.DefaultUsername)
 	}
 
 	// Setup commands

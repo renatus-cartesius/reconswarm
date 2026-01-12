@@ -18,17 +18,6 @@ jobs:
       - name: Run vet
         run: task vet
 
-  staticcheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.mod'
-      - uses: arduino/setup-task@v2
-      - name: Run staticcheck
-        run: task staticcheck
-
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -40,7 +29,7 @@ jobs:
       - name: Run lint
         run: task lint
 
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +39,7 @@ jobs:
       - uses: arduino/setup-task@v2
       - name: Download dependencies
         run: go mod download
-      - name: Run tests
+      - name: Run unit tests
         run: task test
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
@@ -58,4 +47,26 @@ jobs:
         with:
           file: ./coverage.out
           fail_ci_if_error: false
+
+  test-grpc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - uses: arduino/setup-task@v2
+      - name: Run gRPC tests
+        run: task test-grpc
+
+  test-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - uses: arduino/setup-task@v2
+      - name: Run E2E tests
+        run: task test-e2e
 

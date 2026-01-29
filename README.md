@@ -12,7 +12,7 @@ ReconSwarm is suitable for bug bounty hunters, penetration testers, DevSecOps en
 
 - **Dividing targets for parallel execution** — The final compiled targets list is divided among workers for reconnaissance tasks parallel execution
 - **Multiple target types** — Targets list consists of multiple element types: domains from crt.sh response, external list (HTTP/HTTPS URLs), simple list (inline YAML arrays), and shell command output, which is very flexible to use with any tools (cook, shodan, gau, katana, and so on).
-- **Cloud-agnostic architecture** — Allows easy integration with multiple cloud providers (currently supports only Yandex Cloud)
+- **Cloud-agnostic architecture** — Allows easy integration with multiple cloud providers (currently supports AWS, GCP, Yandex Cloud and Digital Ocean)
 - **Flexible pipeline stages** — Extensible stage system currently supporting exec (command execution) and sync (file and directory synchronization) operations
 - **Template context in steps** — Flexible way to pass metadata from execution context to steps
 

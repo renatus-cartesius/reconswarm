@@ -228,6 +228,73 @@ For Yandex Cloud integration, use the provided setup script:
 
 The `secrets-setup.sh` script automatically generates a fresh IAM token each time it's executed, ensuring secure authentication without hardcoding credentials.
 
+### Google Cloud Platform Setup
+
+1. **Create Service Account**:
+   - Go to GCP Console > IAM & Admin > Service Accounts
+   - Create a service account with "Compute Admin" role
+   - Create a JSON key and download it
+
+2. **Configure Environment**:
+   ```bash
+   export GCP_PROJECT_ID="your-project-id"
+   export GCP_CREDENTIALS_PATH="/path/to/key.json"
+   ```
+
+3. **Reference in configuration**:
+   ```yaml
+   provisioner:
+     type: gcp
+     gcp:
+       project_id: "${GCP_PROJECT_ID}"
+       credentials_path: "${GCP_CREDENTIALS_PATH}"
+       default_zone: "us-central1-a"
+   ```
+
+### AWS Setup
+
+1. **Create IAM User**:
+   - Go to AWS Console > IAM > Users
+   - Create user with "AmazonEC2FullAccess" permissions
+   - Generate Access Key ID and Secret Access Key
+
+2. **Configure Environment**:
+   ```bash
+   export AWS_ACCESS_KEY_ID="your-access-key"
+   export AWS_SECRET_ACCESS_KEY="your-secret-key"
+   ```
+
+3. **Reference in configuration**:
+   ```yaml
+   provisioner:
+     type: aws
+     aws:
+       region: "us-east-1"
+       access_key_id: "${AWS_ACCESS_KEY_ID}"
+       secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+       default_zone: "us-east-1a"
+   ```
+
+### DigitalOcean Setup
+
+1. **Generate Token**:
+   - Go to DigitalOcean Control Panel > API
+   - Generate Personal Access Token with "Write" scope
+
+2. **Configure Environment**:
+   ```bash
+   export DO_TOKEN="your-token"
+   ```
+
+3. **Reference in configuration**:
+   ```yaml
+   provisioner:
+     type: digitalocean
+     digitalocean:
+       token: "${DO_TOKEN}"
+       default_region: "nyc1"
+   ```
+
 ### Target Types
 
 **crt.sh enumeration**:
@@ -470,10 +537,10 @@ task ci         # Run all CI checks
 
 ### Multi-Cloud Provider Support
 
-- [ ] Add AWS (EC2) provisioner
-- [ ] Add Google Cloud Platform (Compute Engine) provisioner
+- [x] Add AWS (EC2) provisioner
+- [x] Add Google Cloud Platform (Compute Engine) provisioner
 - [ ] Add Azure (Virtual Machines) provisioner
-- [ ] Add DigitalOcean provisioner
+- [x] Add DigitalOcean provisioner
 
 ### Extended Pipeline Stage Types
 

@@ -83,13 +83,13 @@ func (s *Server) RunPipeline(ctx context.Context, req *api.RunPipelineRequest) (
 }
 
 // GetStatus implements the GetStatus RPC
-func (s *Server) GetStatus(ctx context.Context, req *api.GetStatusRequest) (*api.GetStatusResponse, error) {
+func (s *Server) GetPipelineStatus(ctx context.Context, req *api.GetPipelineStatusRequest) (*api.GetPipelineStatusResponse, error) {
 	state, err := s.pipelineManager.GetStatus(ctx, req.PipelineId)
 	if err != nil {
 		return nil, err
 	}
 
-	resp := &api.GetStatusResponse{
+	resp := &api.GetPipelineStatusResponse{
 		PipelineId:      state.ID,
 		Status:          string(state.Status),
 		Error:           state.Error,

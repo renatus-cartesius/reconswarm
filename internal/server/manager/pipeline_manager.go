@@ -56,7 +56,7 @@ func NewPipelineManager(wm *WorkerManager, sm StateManager) *PipelineManager {
 
 // pipelineWrapper is used to parse YAML files with "pipeline:" root key
 type pipelineWrapper struct {
-	Pipeline pipeline.PipelineRaw `yaml:"pipeline"`
+	Pipeline pipeline.Pipeline `yaml:"pipeline"`
 }
 
 // SubmitPipeline submits a pipeline for execution
@@ -69,23 +69,22 @@ func (pm *PipelineManager) SubmitPipeline(ctx context.Context, yamlContent strin
 	}
 
 	// Use the wrapper if it has content, otherwise try direct parsing
-	var rawPipeline pipeline.PipelineRaw
+	// Use the wrapper if it has content, otherwise try direct parsing
+	var p pipeline.Pipeline
 	if len(wrapper.Pipeline.Targets) > 0 || len(wrapper.Pipeline.Stages) > 0 {
-		rawPipeline = wrapper.Pipeline
+		p = wrapper.Pipeline
 		logging.Logger().Debug("Parsed pipeline with wrapper",
-			zap.Int("targets", len(rawPipeline.Targets)),
-			zap.Int("stages", len(rawPipeline.Stages)))
+			zap.Int("targets", len(p.Targets)),
+			zap.Int("stages", len(p.Stages)))
 	} else {
 		// Fallback: try parsing without wrapper
-		if err := yaml.Unmarshal([]byte(yamlContent), &rawPipeline); err != nil {
+		if err := yaml.Unmarshal([]byte(yamlContent), &p); err != nil {
 			return "", fmt.Errorf("failed to parse pipeline YAML (direct): %w", err)
 		}
 		logging.Logger().Debug("Parsed pipeline directly",
-			zap.Int("targets", len(rawPipeline.Targets)),
-			zap.Int("stages", len(rawPipeline.Stages)))
+			zap.Int("targets", len(p.Targets)),
+			zap.Int("stages", len(p.Stages)))
 	}
-
-	p := rawPipeline.ToPipeline()
 	id := fmt.Sprintf("pipe-%s", uuid.NewString())
 
 	state := &PipelineState{

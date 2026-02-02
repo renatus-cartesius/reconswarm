@@ -2,24 +2,20 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
 	"reconswarm/internal/recon/targets"
 
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
 
 // Pipeline represents the main pipeline configuration.
 type Pipeline struct {
 	Targets []Target `yaml:"targets"`
 	Stages  []Stage  `yaml:"stages"`
-}
-
-// PipelineRaw represents the raw pipeline configuration for YAML deserialization
-type PipelineRaw struct {
-	Targets []Target   `yaml:"targets"`
-	Stages  []StageRaw `yaml:"stages"`
 }
 
 // Target represents a target source for the pipeline.
@@ -36,44 +32,54 @@ type Stage interface {
 	Execute(ctx context.Context, controller control.Controller, targets []string, targetsFile string) error
 }
 
-// StageRaw represents a raw stage for YAML deserialization
-type StageRaw struct {
-	Name  string   `yaml:"name"`
-	Type  string   `yaml:"type"`
-	Steps []string `yaml:"steps,omitempty"`
-	Src   string   `yaml:"src,omitempty"`
-	Dest  string   `yaml:"dest,omitempty"`
-}
-
-// ToPipeline converts PipelineRaw to Pipeline
-func (pr *PipelineRaw) ToPipeline() Pipeline {
-	p := Pipeline{
-		Targets: pr.Targets,
-		Stages:  make([]Stage, len(pr.Stages)),
+// UnmarshalYAML implements the yaml.Unmarshaler interface for Pipeline
+func (p *Pipeline) UnmarshalYAML(node *yaml.Node) error {
+	// Interim structure to decode targets and raw stages
+	var raw struct {
+		Targets []Target    `yaml:"targets"`
+		Stages  []yaml.Node `yaml:"stages"`
 	}
 
-	for i, stageRaw := range pr.Stages {
-		switch stageRaw.Type {
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+
+	p.Targets = raw.Targets
+	p.Stages = make([]Stage, 0, len(raw.Stages))
+
+	for _, stageNode := range raw.Stages {
+		// Interim structure to determine stage type
+		var typeMeta struct {
+			Type string `yaml:"type"`
+		}
+
+		if err := stageNode.Decode(&typeMeta); err != nil {
+			return fmt.Errorf("failed to decode stage type: %w", err)
+		}
+
+		var stage Stage
+		switch typeMeta.Type {
 		case "exec":
-			p.Stages[i] = &ExecStage{
-				Name:  stageRaw.Name,
-				Type:  stageRaw.Type,
-				Steps: stageRaw.Steps,
+			var s ExecStage
+			if err := stageNode.Decode(&s); err != nil {
+				return fmt.Errorf("failed to decode exec stage: %w", err)
 			}
+			stage = &s
 		case "sync":
-			p.Stages[i] = &SyncStage{
-				Name: stageRaw.Name,
-				Type: stageRaw.Type,
-				Src:  stageRaw.Src,
-				Dest: stageRaw.Dest,
+			var s SyncStage
+			if err := stageNode.Decode(&s); err != nil {
+				return fmt.Errorf("failed to decode sync stage: %w", err)
 			}
+			stage = &s
 		default:
-			// Skip unknown stage types
+			logging.Logger().Warn("unknown stage type, skipping", zap.String("type", typeMeta.Type))
 			continue
 		}
+
+		p.Stages = append(p.Stages, stage)
 	}
 
-	return p
+	return nil
 }
 
 // CompileTargets compiles all targets from the pipeline by processing each target definition.

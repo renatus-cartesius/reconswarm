@@ -504,9 +504,9 @@ func TestOpenFile_WriteTargetsFile(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	pipelineRaw := PipelineRaw{
-		Stages: []StageRaw{
-			{
+	p := Pipeline{
+		Stages: []Stage{
+			&ExecStage{
 				Name:  "Test",
 				Type:  "exec",
 				Steps: []string{"echo test"},
@@ -514,7 +514,7 @@ func TestOpenFile_WriteTargetsFile(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets)
 	if err != nil {
 		t.Fatalf("Failed to execute: %v", err)
 	}
@@ -555,9 +555,9 @@ func TestOpenFile_ErrorHandling(t *testing.T) {
 
 	targets := []string{"example.com"}
 
-	pipelineRaw := PipelineRaw{
-		Stages: []StageRaw{
-			{
+	p := Pipeline{
+		Stages: []Stage{
+			&ExecStage{
 				Name:  "Test",
 				Type:  "exec",
 				Steps: []string{"echo test"},
@@ -565,7 +565,7 @@ func TestOpenFile_ErrorHandling(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets)
 	if err == nil {
 		t.Fatal("Expected error when OpenFile fails, but got nil")
 	}
@@ -586,9 +586,9 @@ func TestOpenFile_CalledWithCorrectFlags(t *testing.T) {
 
 	targets := []string{"example.com"}
 
-	pipelineRaw := PipelineRaw{
-		Stages: []StageRaw{
-			{
+	p := Pipeline{
+		Stages: []Stage{
+			&ExecStage{
 				Name:  "Test",
 				Type:  "exec",
 				Steps: []string{"echo test"},
@@ -596,7 +596,7 @@ func TestOpenFile_CalledWithCorrectFlags(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -631,9 +631,9 @@ func TestOpenFile_MultipleTargets(t *testing.T) {
 		targets[i] = fmt.Sprintf("target%d.example.com", i)
 	}
 
-	pipelineRaw := PipelineRaw{
-		Stages: []StageRaw{
-			{
+	p := Pipeline{
+		Stages: []Stage{
+			&ExecStage{
 				Name:  "Test",
 				Type:  "exec",
 				Steps: []string{"echo test"},
@@ -641,7 +641,7 @@ func TestOpenFile_MultipleTargets(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets)
 	if err != nil {
 		t.Fatalf("Failed to execute with many targets: %v", err)
 	}
@@ -677,9 +677,9 @@ func TestOpenFile_SpecialCharactersInTargets(t *testing.T) {
 		"domain$(command).com",
 	}
 
-	pipelineRaw := PipelineRaw{
-		Stages: []StageRaw{
-			{
+	p := Pipeline{
+		Stages: []Stage{
+			&ExecStage{
 				Name:  "Test",
 				Type:  "exec",
 				Steps: []string{"echo test"},
@@ -687,7 +687,7 @@ func TestOpenFile_SpecialCharactersInTargets(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets)
 	if err != nil {
 		t.Fatalf("Failed to execute with special characters: %v", err)
 	}
@@ -711,9 +711,9 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 		syncedFiles:  []syncedFile{},
 	}
 
-	pipelineRaw := PipelineRaw{
-		Stages: []StageRaw{
-			{
+	p := Pipeline{
+		Stages: []Stage{
+			&ExecStage{
 				Name: "First Stage",
 				Type: "exec",
 				Steps: []string{
@@ -721,7 +721,7 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 					"mkdir -p /opt/recon",
 				},
 			},
-			{
+			&ExecStage{
 				Name: "Second Stage",
 				Type: "exec",
 				Steps: []string{
@@ -733,7 +733,7 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	err := ExecuteOnWorker(context.Background(), controller, pipelineRaw.ToPipeline(), targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets)
 	if err != nil {
 		t.Fatalf("Failed to run stages: %v", err)
 	}

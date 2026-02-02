@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ReconSwarm_RunPipeline_FullMethodName       = "/reconswarm.ReconSwarm/RunPipeline"
 	ReconSwarm_GetPipelineStatus_FullMethodName = "/reconswarm.ReconSwarm/GetPipelineStatus"
+	ReconSwarm_ListPipelines_FullMethodName     = "/reconswarm.ReconSwarm/ListPipelines"
 )
 
 // ReconSwarmClient is the client API for ReconSwarm service.
@@ -29,6 +30,7 @@ const (
 type ReconSwarmClient interface {
 	RunPipeline(ctx context.Context, in *RunPipelineRequest, opts ...grpc.CallOption) (*RunPipelineResponse, error)
 	GetPipelineStatus(ctx context.Context, in *GetPipelineStatusRequest, opts ...grpc.CallOption) (*GetPipelineStatusResponse, error)
+	ListPipelines(ctx context.Context, in *ListPipelinesRequest, opts ...grpc.CallOption) (*ListPipelinesResponse, error)
 }
 
 type reconSwarmClient struct {
@@ -59,12 +61,23 @@ func (c *reconSwarmClient) GetPipelineStatus(ctx context.Context, in *GetPipelin
 	return out, nil
 }
 
+func (c *reconSwarmClient) ListPipelines(ctx context.Context, in *ListPipelinesRequest, opts ...grpc.CallOption) (*ListPipelinesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPipelinesResponse)
+	err := c.cc.Invoke(ctx, ReconSwarm_ListPipelines_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReconSwarmServer is the server API for ReconSwarm service.
 // All implementations must embed UnimplementedReconSwarmServer
 // for forward compatibility.
 type ReconSwarmServer interface {
 	RunPipeline(context.Context, *RunPipelineRequest) (*RunPipelineResponse, error)
 	GetPipelineStatus(context.Context, *GetPipelineStatusRequest) (*GetPipelineStatusResponse, error)
+	ListPipelines(context.Context, *ListPipelinesRequest) (*ListPipelinesResponse, error)
 	mustEmbedUnimplementedReconSwarmServer()
 }
 
@@ -80,6 +93,9 @@ func (UnimplementedReconSwarmServer) RunPipeline(context.Context, *RunPipelineRe
 }
 func (UnimplementedReconSwarmServer) GetPipelineStatus(context.Context, *GetPipelineStatusRequest) (*GetPipelineStatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetPipelineStatus not implemented")
+}
+func (UnimplementedReconSwarmServer) ListPipelines(context.Context, *ListPipelinesRequest) (*ListPipelinesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPipelines not implemented")
 }
 func (UnimplementedReconSwarmServer) mustEmbedUnimplementedReconSwarmServer() {}
 func (UnimplementedReconSwarmServer) testEmbeddedByValue()                    {}
@@ -138,6 +154,24 @@ func _ReconSwarm_GetPipelineStatus_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReconSwarm_ListPipelines_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPipelinesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReconSwarmServer).ListPipelines(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReconSwarm_ListPipelines_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReconSwarmServer).ListPipelines(ctx, req.(*ListPipelinesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ReconSwarm_ServiceDesc is the grpc.ServiceDesc for ReconSwarm service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -152,6 +186,10 @@ var ReconSwarm_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPipelineStatus",
 			Handler:    _ReconSwarm_GetPipelineStatus_Handler,
+		},
+		{
+			MethodName: "ListPipelines",
+			Handler:    _ReconSwarm_ListPipelines_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -7,6 +7,7 @@ option go_package = "reconswarm/api";
 service ReconSwarm {
   rpc RunPipeline(RunPipelineRequest) returns (RunPipelineResponse);
   rpc GetPipelineStatus(GetPipelineStatusRequest) returns (GetPipelineStatusResponse);
+  rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse);
 }
 
 message RunPipelineRequest {
@@ -35,4 +36,12 @@ message WorkerStatus {
   string name = 2;
   string status = 3; // Provisioning, Running, Idle, Terminated
   string current_task = 4;
+}
+
+message ListPipelinesRequest {
+  string statusFilter = 1; // Pending, Running, Completed, Failed
+}
+
+message ListPipelinesResponse {
+  repeated GetPipelineStatusResponse pipelines = 1;
 }

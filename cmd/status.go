@@ -53,7 +53,7 @@ func getStatus(serverAddr, pipelineID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	r, err := c.GetPipelineStatus(ctx, &api.GetPipelineStatusRequest{PipelineId: pipelineID})
+	r, err := c.GetPipeline(ctx, &api.GetPipelineRequest{PipelineId: pipelineID})
 	if err != nil {
 		logging.Logger().Fatal("Could not get status", zap.Error(err))
 	}

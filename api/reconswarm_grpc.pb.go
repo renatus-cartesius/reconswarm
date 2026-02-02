@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ReconSwarm_RunPipeline_FullMethodName       = "/reconswarm.ReconSwarm/RunPipeline"
-	ReconSwarm_GetPipelineStatus_FullMethodName = "/reconswarm.ReconSwarm/GetPipelineStatus"
-	ReconSwarm_ListPipelines_FullMethodName     = "/reconswarm.ReconSwarm/ListPipelines"
+	ReconSwarm_RunPipeline_FullMethodName   = "/reconswarm.ReconSwarm/RunPipeline"
+	ReconSwarm_GetPipeline_FullMethodName   = "/reconswarm.ReconSwarm/GetPipeline"
+	ReconSwarm_ListPipelines_FullMethodName = "/reconswarm.ReconSwarm/ListPipelines"
 )
 
 // ReconSwarmClient is the client API for ReconSwarm service.
@@ -29,7 +29,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ReconSwarmClient interface {
 	RunPipeline(ctx context.Context, in *RunPipelineRequest, opts ...grpc.CallOption) (*RunPipelineResponse, error)
-	GetPipelineStatus(ctx context.Context, in *GetPipelineStatusRequest, opts ...grpc.CallOption) (*GetPipelineStatusResponse, error)
+	GetPipeline(ctx context.Context, in *GetPipelineRequest, opts ...grpc.CallOption) (*GetPipelineResponse, error)
 	ListPipelines(ctx context.Context, in *ListPipelinesRequest, opts ...grpc.CallOption) (*ListPipelinesResponse, error)
 }
 
@@ -51,10 +51,10 @@ func (c *reconSwarmClient) RunPipeline(ctx context.Context, in *RunPipelineReque
 	return out, nil
 }
 
-func (c *reconSwarmClient) GetPipelineStatus(ctx context.Context, in *GetPipelineStatusRequest, opts ...grpc.CallOption) (*GetPipelineStatusResponse, error) {
+func (c *reconSwarmClient) GetPipeline(ctx context.Context, in *GetPipelineRequest, opts ...grpc.CallOption) (*GetPipelineResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetPipelineStatusResponse)
-	err := c.cc.Invoke(ctx, ReconSwarm_GetPipelineStatus_FullMethodName, in, out, cOpts...)
+	out := new(GetPipelineResponse)
+	err := c.cc.Invoke(ctx, ReconSwarm_GetPipeline_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (c *reconSwarmClient) ListPipelines(ctx context.Context, in *ListPipelinesR
 // for forward compatibility.
 type ReconSwarmServer interface {
 	RunPipeline(context.Context, *RunPipelineRequest) (*RunPipelineResponse, error)
-	GetPipelineStatus(context.Context, *GetPipelineStatusRequest) (*GetPipelineStatusResponse, error)
+	GetPipeline(context.Context, *GetPipelineRequest) (*GetPipelineResponse, error)
 	ListPipelines(context.Context, *ListPipelinesRequest) (*ListPipelinesResponse, error)
 	mustEmbedUnimplementedReconSwarmServer()
 }
@@ -91,8 +91,8 @@ type UnimplementedReconSwarmServer struct{}
 func (UnimplementedReconSwarmServer) RunPipeline(context.Context, *RunPipelineRequest) (*RunPipelineResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RunPipeline not implemented")
 }
-func (UnimplementedReconSwarmServer) GetPipelineStatus(context.Context, *GetPipelineStatusRequest) (*GetPipelineStatusResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetPipelineStatus not implemented")
+func (UnimplementedReconSwarmServer) GetPipeline(context.Context, *GetPipelineRequest) (*GetPipelineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPipeline not implemented")
 }
 func (UnimplementedReconSwarmServer) ListPipelines(context.Context, *ListPipelinesRequest) (*ListPipelinesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPipelines not implemented")
@@ -136,20 +136,20 @@ func _ReconSwarm_RunPipeline_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ReconSwarm_GetPipelineStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetPipelineStatusRequest)
+func _ReconSwarm_GetPipeline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPipelineRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ReconSwarmServer).GetPipelineStatus(ctx, in)
+		return srv.(ReconSwarmServer).GetPipeline(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ReconSwarm_GetPipelineStatus_FullMethodName,
+		FullMethod: ReconSwarm_GetPipeline_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReconSwarmServer).GetPipelineStatus(ctx, req.(*GetPipelineStatusRequest))
+		return srv.(ReconSwarmServer).GetPipeline(ctx, req.(*GetPipelineRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -184,8 +184,8 @@ var ReconSwarm_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ReconSwarm_RunPipeline_Handler,
 		},
 		{
-			MethodName: "GetPipelineStatus",
-			Handler:    _ReconSwarm_GetPipelineStatus_Handler,
+			MethodName: "GetPipeline",
+			Handler:    _ReconSwarm_GetPipeline_Handler,
 		},
 		{
 			MethodName: "ListPipelines",

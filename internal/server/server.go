@@ -82,14 +82,14 @@ func (s *Server) RunPipeline(ctx context.Context, req *api.RunPipelineRequest) (
 	return &api.RunPipelineResponse{PipelineId: id}, nil
 }
 
-// GetStatus implements the GetStatus RPC
-func (s *Server) GetPipelineStatus(ctx context.Context, req *api.GetPipelineStatusRequest) (*api.GetPipelineStatusResponse, error) {
+// GetPipeline implements the GetPipeline RPC
+func (s *Server) GetPipeline(ctx context.Context, req *api.GetPipelineRequest) (*api.GetPipelineResponse, error) {
 	state, err := s.pipelineManager.GetStatus(ctx, req.PipelineId)
 	if err != nil {
 		return nil, err
 	}
 
-	resp := &api.GetPipelineStatusResponse{
+	resp := &api.GetPipelineResponse{
 		PipelineId:      state.ID,
 		Status:          string(state.Status),
 		Error:           state.Error,
@@ -101,7 +101,7 @@ func (s *Server) GetPipelineStatus(ctx context.Context, req *api.GetPipelineStat
 	workers := s.workerManager.GetStatus()
 	for _, w := range workers {
 		if w.CurrentTask == req.PipelineId || w.Status == manager.WorkerStatusIdle {
-			resp.Workers = append(resp.Workers, &api.WorkerStatus{
+			resp.Workers = append(resp.Workers, &api.Worker{
 				WorkerId:    w.ID,
 				Name:        w.Name,
 				Status:      string(w.Status),
@@ -116,6 +116,10 @@ func (s *Server) GetPipelineStatus(ctx context.Context, req *api.GetPipelineStat
 // Start starts the gRPC server on the configured port
 func (s *Server) Start() error {
 	return s.StartOnPort(s.config.Server.Port)
+}
+
+func (s *Server) ListPipelines(ctx context.Context, req *api.ListPipelinesRequest) (*api.ListPipelinesResponse, error){
+	return nil, nil
 }
 
 // StartOnPort starts the gRPC server on a specific port (for backwards compatibility)

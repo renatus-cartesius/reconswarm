@@ -309,7 +309,7 @@ stages:
 		})
 	})
 
-	Context("GetPipelineStatus", func() {
+	Context("GetPipeline", func() {
 		It("should return status for existing pipeline", func() {
 			// First submit a pipeline
 			req := &api.RunPipelineRequest{
@@ -331,14 +331,14 @@ stages:
 			id := resp.PipelineId
 
 			// Get status
-			statusResp, err := client.GetPipelineStatus(ctx, &api.GetPipelineStatusRequest{PipelineId: id})
+			statusResp, err := client.GetPipeline(ctx, &api.GetPipelineRequest{PipelineId: id})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(statusResp.PipelineId).To(Equal(id))
 			Expect(statusResp.Status).To(Or(Equal("Pending"), Equal("Running"), Equal("Completed")))
 		})
 
 		It("should return error for non-existent pipeline", func() {
-			_, err := client.GetPipelineStatus(ctx, &api.GetPipelineStatusRequest{PipelineId: "non-existent"})
+			_, err := client.GetPipeline(ctx, &api.GetPipelineRequest{PipelineId: "non-existent"})
 			Expect(err).To(HaveOccurred())
 		})
 	})

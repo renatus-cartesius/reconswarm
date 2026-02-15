@@ -8,6 +8,7 @@ import (
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
 	"reconswarm/internal/logging"
+	"reconswarm/internal/pipeline"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/server/manager"
 	"reconswarm/internal/ssh"
@@ -70,9 +71,18 @@ func NewServerWithDependencies(pm *manager.PipelineManager, wm *manager.WorkerMa
 
 // RunPipeline implements the RunPipeline RPC
 func (s *Server) RunPipeline(ctx context.Context, req *api.RunPipelineRequest) (*api.RunPipelineResponse, error) {
-	logging.Logger().Info("RunPipeline RPC called", zap.Int("yaml_length", len(req.PipelineYaml)))
+	if req.Pipeline == nil {
+		return nil, fmt.Errorf("pipeline is required")
+	}
 
-	id, err := s.pipelineManager.SubmitPipeline(ctx, req.PipelineYaml)
+	logging.Logger().Info("RunPipeline RPC called",
+		zap.Int("targets", len(req.Pipeline.Targets)),
+		zap.Int("stages", len(req.Pipeline.Stages)))
+
+	// Convert proto Pipeline to domain Pipeline
+	p := protoToPipeline(req.Pipeline)
+
+	id, err := s.pipelineManager.SubmitPipeline(ctx, p)
 	if err != nil {
 		logging.Logger().Error("SubmitPipeline failed", zap.Error(err))
 		return nil, err
@@ -95,6 +105,11 @@ func (s *Server) GetPipeline(ctx context.Context, req *api.GetPipelineRequest) (
 		Error:           state.Error,
 		TotalStages:     int32(state.TotalStages),
 		CompletedStages: int32(state.CompletedStages),
+	}
+
+	// Include pipeline definition if available (in-memory pipelines only)
+	if state.Pipeline != nil {
+		resp.Pipeline = pipelineToProto(*state.Pipeline)
 	}
 
 	// Add worker status
@@ -134,4 +149,89 @@ func (s *Server) StartOnPort(port int) error {
 
 	logging.Logger().Info("Starting gRPC server", zap.Int("port", port))
 	return grpcServer.Serve(lis)
+}
+
+// =================== Proto <-> Domain Conversion ===================
+
+// protoToPipeline converts an api.Pipeline proto message to a domain pipeline.Pipeline.
+func protoToPipeline(p *api.Pipeline) pipeline.Pipeline {
+	var pip pipeline.Pipeline
+
+	for _, t := range p.GetTargets() {
+		target := pipeline.Target{Type: t.GetType()}
+		if len(t.GetListValue()) > 0 {
+			// Convert []string to []any for compatibility with targets.FromList
+			vals := make([]any, len(t.GetListValue()))
+			for i, v := range t.GetListValue() {
+				vals[i] = v
+			}
+			target.Value = vals
+		} else {
+			target.Value = t.GetStringValue()
+		}
+		pip.Targets = append(pip.Targets, target)
+	}
+
+	for _, s := range p.GetStages() {
+		switch cfg := s.GetConfig().(type) {
+		case *api.Stage_Exec:
+			pip.Stages = append(pip.Stages, &pipeline.ExecStage{
+				Name:  s.GetName(),
+				Type:  "exec",
+				Steps: cfg.Exec.GetSteps(),
+			})
+		case *api.Stage_Sync:
+			pip.Stages = append(pip.Stages, &pipeline.SyncStage{
+				Name: s.GetName(),
+				Type: "sync",
+				Src:  cfg.Sync.GetSrc(),
+				Dest: cfg.Sync.GetDest(),
+			})
+		}
+	}
+
+	return pip
+}
+
+// pipelineToProto converts a domain pipeline.Pipeline to an api.Pipeline proto message.
+func pipelineToProto(p pipeline.Pipeline) *api.Pipeline {
+	proto := &api.Pipeline{}
+
+	for _, t := range p.Targets {
+		pt := &api.Target{Type: t.Type}
+		switch v := t.Value.(type) {
+		case string:
+			pt.StringValue = v
+		case []any:
+			for _, item := range v {
+				if s, ok := item.(string); ok {
+					pt.ListValue = append(pt.ListValue, s)
+				}
+			}
+		case []string:
+			pt.ListValue = v
+		}
+		proto.Targets = append(proto.Targets, pt)
+	}
+
+	for _, s := range p.Stages {
+		switch stage := s.(type) {
+		case *pipeline.ExecStage:
+			proto.Stages = append(proto.Stages, &api.Stage{
+				Name: stage.Name,
+				Config: &api.Stage_Exec{
+					Exec: &api.ExecStage{Steps: stage.Steps},
+				},
+			})
+		case *pipeline.SyncStage:
+			proto.Stages = append(proto.Stages, &api.Stage{
+				Name: stage.Name,
+				Config: &api.Stage_Sync{
+					Sync: &api.SyncStage{Src: stage.Src, Dest: stage.Dest},
+				},
+			})
+		}
+	}
+
+	return proto
 }

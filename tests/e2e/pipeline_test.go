@@ -9,6 +9,7 @@ import (
 	"os"
 	"reconswarm/internal/config"
 	"reconswarm/internal/control"
+	"reconswarm/internal/pipeline"
 	"reconswarm/internal/provisioning"
 	"reconswarm/internal/server/manager"
 	"reconswarm/internal/ssh"
@@ -18,6 +19,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"gopkg.in/yaml.v3"
 )
 
 // mockFile implements io.ReadWriteCloser for testing
@@ -277,6 +279,25 @@ func createTestConfig() config.Config {
 	}
 }
 
+// pipelineWrapper is used to parse YAML files with "pipeline:" root key
+type pipelineWrapper struct {
+	Pipeline pipeline.Pipeline `yaml:"pipeline"`
+}
+
+// parsePipelineYAML parses YAML into a domain Pipeline (supports both wrapped and direct formats)
+func parsePipelineYAML(data string) pipeline.Pipeline {
+	var wrapper pipelineWrapper
+	err := yaml.Unmarshal([]byte(data), &wrapper)
+	Expect(err).NotTo(HaveOccurred())
+	if len(wrapper.Pipeline.Targets) > 0 || len(wrapper.Pipeline.Stages) > 0 {
+		return wrapper.Pipeline
+	}
+	var p pipeline.Pipeline
+	err = yaml.Unmarshal([]byte(data), &p)
+	Expect(err).NotTo(HaveOccurred())
+	return p
+}
+
 var _ = Describe("Pipeline E2E", func() {
 	var (
 		cfg             config.Config
@@ -328,7 +349,7 @@ stages:
     steps:
       - echo "hello"
 `
-			id, err := pipelineManager.SubmitPipeline(ctx, pipelineYAML)
+			id, err := pipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(id).NotTo(BeEmpty())
 
@@ -375,10 +396,10 @@ stages:
     steps:
       - sleep 2
 `
-			id1, err := pipelineManager.SubmitPipeline(ctx, pipeline1)
+			id1, err := pipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipeline1))
 			Expect(err).NotTo(HaveOccurred())
 
-			id2, err := pipelineManager.SubmitPipeline(ctx, pipeline2)
+			id2, err := pipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipeline2))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Both should be running or completed eventually
@@ -416,7 +437,7 @@ stages:
     steps:
       - sleep 5
 `
-			id, err := pipelineManager.SubmitPipeline(ctx, pipelineYAML)
+			id, err := pipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Wait for it to be running
@@ -463,7 +484,7 @@ stages:
     src: /opt/recon/{{.Worker.Name}}-results.json
     dest: ./results/{{.Worker.Name}}-results.json
 `
-			id, err := pipelineManager.SubmitPipeline(ctx, pipelineYAML)
+			id, err := pipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(id).NotTo(BeEmpty())
 
@@ -490,7 +511,7 @@ stages:
     src: "{{.Targets.filepath}}"
     dest: ./backup/targets-{{.Worker.Name}}.txt
 `
-			id, err := pipelineManager.SubmitPipeline(ctx, pipelineYAML)
+			id, err := pipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(id).NotTo(BeEmpty())
 
@@ -544,7 +565,7 @@ stages:
     steps:
       - echo "test"
 `
-			id, err := trackingPipelineManager.SubmitPipeline(ctx, pipelineYAML)
+			id, err := trackingPipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
 			Expect(err).NotTo(HaveOccurred())
 
 			// Wait for completion
@@ -615,7 +636,7 @@ stages:
     steps:
       - echo "done"
 `
-			id, err := trackingPipelineManager.SubmitPipeline(ctx, pipelineYAML)
+			id, err := trackingPipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() manager.PipelineStatus {
@@ -694,7 +715,7 @@ stages:
     src: /opt/recon/output/{{.Worker.Name}}-httpx.json
     dest: ./results/{{.Worker.Name}}-httpx.json
 `
-			id, err := trackingPipelineManager.SubmitPipeline(ctx, pipelineYAML)
+			id, err := trackingPipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() manager.PipelineStatus {

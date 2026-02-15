@@ -13,7 +13,6 @@ import (
 	"github.com/alitto/pond/v2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 )
 
 // PipelineStatus represents the status of a pipeline
@@ -35,6 +34,7 @@ type PipelineState struct {
 	CompletedStages int
 	StartTime       time.Time
 	EndTime         time.Time
+	Pipeline        *pipeline.Pipeline `json:"-"` // in-memory only, not persisted to etcd
 }
 
 // PipelineManager manages pipeline execution
@@ -54,37 +54,20 @@ func NewPipelineManager(wm *WorkerManager, sm StateManager) *PipelineManager {
 	}
 }
 
-// pipelineWrapper is used to parse YAML files with "pipeline:" root key
-type pipelineWrapper struct {
-	Pipeline pipeline.Pipeline `yaml:"pipeline"`
-}
-
-// SubmitPipeline submits a pipeline for execution
-func (pm *PipelineManager) SubmitPipeline(ctx context.Context, yamlContent string) (string, error) {
-
-	// Try to parse with "pipeline:" wrapper first
-	var wrapper pipelineWrapper
-	if err := yaml.Unmarshal([]byte(yamlContent), &wrapper); err != nil {
-		return "", fmt.Errorf("failed to parse pipeline YAML: %w", err)
+// SubmitPipeline submits a pipeline for execution.
+// The caller is responsible for parsing the pipeline definition (e.g. from YAML or proto).
+func (pm *PipelineManager) SubmitPipeline(ctx context.Context, p pipeline.Pipeline) (string, error) {
+	if len(p.Targets) == 0 {
+		return "", fmt.Errorf("pipeline must have at least one target")
+	}
+	if len(p.Stages) == 0 {
+		return "", fmt.Errorf("pipeline must have at least one stage")
 	}
 
-	// Use the wrapper if it has content, otherwise try direct parsing
-	// Use the wrapper if it has content, otherwise try direct parsing
-	var p pipeline.Pipeline
-	if len(wrapper.Pipeline.Targets) > 0 || len(wrapper.Pipeline.Stages) > 0 {
-		p = wrapper.Pipeline
-		logging.Logger().Debug("Parsed pipeline with wrapper",
-			zap.Int("targets", len(p.Targets)),
-			zap.Int("stages", len(p.Stages)))
-	} else {
-		// Fallback: try parsing without wrapper
-		if err := yaml.Unmarshal([]byte(yamlContent), &p); err != nil {
-			return "", fmt.Errorf("failed to parse pipeline YAML (direct): %w", err)
-		}
-		logging.Logger().Debug("Parsed pipeline directly",
-			zap.Int("targets", len(p.Targets)),
-			zap.Int("stages", len(p.Stages)))
-	}
+	logging.Logger().Debug("Submitting pipeline",
+		zap.Int("targets", len(p.Targets)),
+		zap.Int("stages", len(p.Stages)))
+
 	id := fmt.Sprintf("pipe-%s", uuid.NewString())
 
 	state := &PipelineState{
@@ -92,6 +75,7 @@ func (pm *PipelineManager) SubmitPipeline(ctx context.Context, yamlContent strin
 		Status:      PipelineStatusPending,
 		TotalStages: len(p.Stages),
 		StartTime:   time.Now(),
+		Pipeline:    &p,
 	}
 
 	pm.mu.Lock()

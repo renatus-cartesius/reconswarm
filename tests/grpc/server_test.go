@@ -282,28 +282,35 @@ var _ = Describe("gRPC Server", func() {
 	Context("RunPipeline", func() {
 		It("should successfully submit a pipeline", func() {
 			req := &api.RunPipelineRequest{
-				PipelineYaml: `
-name: test-pipeline
-targets:
-  - type: list
-    value:
-      - localhost
-stages:
-  - name: stage1
-    type: exec
-    steps:
-      - echo hello
-`,
+				Pipeline: &api.Pipeline{
+					Targets: []*api.Target{
+						{Type: "list", ListValue: []string{"localhost"}},
+					},
+					Stages: []*api.Stage{
+						{
+							Name: "stage1",
+							Config: &api.Stage_Exec{
+								Exec: &api.ExecStage{Steps: []string{"echo hello"}},
+							},
+						},
+					},
+				},
 			}
 			resp, err := client.RunPipeline(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.PipelineId).NotTo(BeEmpty())
 		})
 
-		It("should fail with invalid YAML", func() {
+		It("should fail with empty pipeline", func() {
 			req := &api.RunPipelineRequest{
-				PipelineYaml: `invalid: yaml: content: [`,
+				Pipeline: &api.Pipeline{},
 			}
+			_, err := client.RunPipeline(ctx, req)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should fail with nil pipeline", func() {
+			req := &api.RunPipelineRequest{}
 			_, err := client.RunPipeline(ctx, req)
 			Expect(err).To(HaveOccurred())
 		})
@@ -313,18 +320,19 @@ stages:
 		It("should return status for existing pipeline", func() {
 			// First submit a pipeline
 			req := &api.RunPipelineRequest{
-				PipelineYaml: `
-name: test-pipeline
-targets:
-  - type: list
-    value:
-      - localhost
-stages:
-  - name: stage1
-    type: exec
-    steps:
-      - echo hello
-`,
+				Pipeline: &api.Pipeline{
+					Targets: []*api.Target{
+						{Type: "list", ListValue: []string{"localhost"}},
+					},
+					Stages: []*api.Stage{
+						{
+							Name: "stage1",
+							Config: &api.Stage_Exec{
+								Exec: &api.ExecStage{Steps: []string{"echo hello"}},
+							},
+						},
+					},
+				},
 			}
 			resp, err := client.RunPipeline(ctx, req)
 			Expect(err).NotTo(HaveOccurred())

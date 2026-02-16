@@ -34,7 +34,7 @@ type PipelineState struct {
 	CompletedStages int
 	StartTime       time.Time
 	EndTime         time.Time
-	Pipeline        *pipeline.Pipeline `json:"-"` // in-memory only, not persisted to etcd
+	Pipeline        *pipeline.Pipeline
 }
 
 // PipelineManager manages pipeline execution
@@ -84,7 +84,7 @@ func (pm *PipelineManager) SubmitPipeline(ctx context.Context, p pipeline.Pipeli
 
 	// Save initial state
 	if err := pm.stateManager.SavePipeline(ctx, id, state); err != nil {
-		logging.Logger().Error("Failed to save pipeline state", zap.Error(err))
+		logging.Logger().Error("failed to save pipeline state", zap.Error(err))
 	}
 
 	// Start execution in background
@@ -148,8 +148,6 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 	// Process each chunk: create ephemeral worker -> execute -> delete worker
 	for chunk := range slices.Chunk(targetsList, (len(targetsList)+workersCount-1)/workersCount) {
 		pool.Submit(func() {
-			logging.Logger().Info("started ephemeral worker", zap.Int("targets_count", len(chunk)))
-
 			// Create ephemeral worker
 			worker, err := pm.workerManager.CreateEphemeralWorker(ctx)
 			if err != nil {
@@ -159,6 +157,7 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 
 			// Always delete worker after execution
 			defer func() {
+				logging.Logger().Debug("deleting ephemeral worker", zap.String("name", worker.Name))
 				if err := pm.workerManager.DeleteEphemeralWorker(ctx, worker); err != nil {
 					logging.Logger().Error("failed to delete ephemeral worker", zap.Error(err))
 				}

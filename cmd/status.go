@@ -53,7 +53,7 @@ func getStatus(serverAddr, pipelineID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	r, err := c.GetStatus(ctx, &api.GetStatusRequest{PipelineId: pipelineID})
+	r, err := c.GetPipeline(ctx, &api.GetPipelineRequest{PipelineId: pipelineID})
 	if err != nil {
 		logging.Logger().Fatal("Could not get status", zap.Error(err))
 	}
@@ -64,6 +64,14 @@ func getStatus(serverAddr, pipelineID string) {
 		fmt.Printf("Error: %s\n", r.Error)
 	}
 	fmt.Printf("Progress: %d/%d stages completed\n", r.CompletedStages, r.TotalStages)
+
+	if p := r.Pipeline; p != nil {
+		fmt.Printf("Targets: %d\n", len(p.Targets))
+		fmt.Printf("Stages: %d\n", len(p.Stages))
+		for i, s := range p.Stages {
+			fmt.Printf("  %d. %s\n", i+1, s.Name)
+		}
+	}
 
 	if len(r.Workers) > 0 {
 		fmt.Println("\nWorkers:")

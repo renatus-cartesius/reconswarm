@@ -6,33 +6,84 @@ option go_package = "reconswarm/api";
 
 service ReconSwarm {
   rpc RunPipeline(RunPipelineRequest) returns (RunPipelineResponse);
-  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  rpc GetPipeline(GetPipelineRequest) returns (GetPipelineResponse);
+  rpc ListPipelines(ListPipelinesRequest) returns (ListPipelinesResponse);
 }
 
+// =================== Pipeline Definition ===================
+
+// Pipeline represents the full pipeline configuration.
+// This mirrors the YAML structure used for defining pipelines.
+message Pipeline {
+  repeated Target targets = 1;
+  repeated Stage stages = 2;
+}
+
+// Target defines a source of targets for the pipeline.
+message Target {
+  string type = 1;                 // crtsh, list, external_list, shell_output
+  string string_value = 2;         // used for crtsh, external_list, shell_output
+  repeated string list_value = 3;  // used for list type
+}
+
+// Stage defines a single pipeline stage.
+message Stage {
+  string name = 1;
+  oneof config {
+    ExecStage exec = 2;
+    SyncStage sync = 3;
+  }
+}
+
+// ExecStage executes a sequence of shell commands on the worker.
+message ExecStage {
+  repeated string steps = 1;
+}
+
+// SyncStage synchronizes files between remote worker and local machine.
+message SyncStage {
+  string src = 1;
+  string dest = 2;
+}
+
+// =================== Runtime ===================
+
+// Worker represents a worker node status.
+message Worker {
+  string worker_id = 1;
+  string name = 2;
+  string status = 3;
+  string current_task = 4;
+}
+
+// =================== RPC Messages ===================
+
 message RunPipelineRequest {
-  string pipeline_yaml = 1;
+  Pipeline pipeline = 1;
 }
 
 message RunPipelineResponse {
   string pipeline_id = 1;
 }
 
-message GetStatusRequest {
+message GetPipelineRequest {
   string pipeline_id = 1;
 }
 
-message GetStatusResponse {
+message GetPipelineResponse {
   string pipeline_id = 1;
-  string status = 2; // Pending, Running, Completed, Failed
-  string error = 3;
-  int32 total_stages = 4;
-  int32 completed_stages = 5;
-  repeated WorkerStatus workers = 6;
+  Pipeline pipeline = 2;
+  string status = 3;
+  string error = 4;
+  int32 total_stages = 5;
+  int32 completed_stages = 6;
+  repeated Worker workers = 7;
 }
 
-message WorkerStatus {
-  string worker_id = 1;
-  string name = 2;
-  string status = 3; // Provisioning, Running, Idle, Terminated
-  string current_task = 4;
+message ListPipelinesRequest {
+  string status_filter = 1;
+}
+
+message ListPipelinesResponse {
+  repeated GetPipelineResponse pipelines = 1;
 }

@@ -12,7 +12,7 @@ import (
 // StateManager defines the interface for state persistence
 // Note: SSH key management is handled by ssh.KeyProvider
 type StateManager interface {
-	SavePipeline(ctx context.Context, pipelineID string, state any) error
+	SavePipeline(ctx context.Context, pipelineID string, pipelineState *PipelineState) error
 	GetPipeline(ctx context.Context, pipelineID string, state any) error
 	SaveWorker(ctx context.Context, workerID string, state any) error
 	GetWorker(ctx context.Context, workerID string, state any) error
@@ -44,11 +44,12 @@ func (sm *EtcdStateManager) Close() error {
 }
 
 // SavePipeline saves the pipeline state
-func (sm *EtcdStateManager) SavePipeline(ctx context.Context, pipelineID string, state any) error {
-	data, err := json.Marshal(state)
+func (sm *EtcdStateManager) SavePipeline(ctx context.Context, pipelineID string, pipelineState *PipelineState) error {
+	data, err := json.Marshal(pipelineState)
 	if err != nil {
 		return fmt.Errorf("failed to marshal pipeline state: %w", err)
 	}
+
 	_, err = sm.client.Put(ctx, fmt.Sprintf("/pipelines/%s", pipelineID), string(data))
 	if err != nil {
 		return fmt.Errorf("failed to save pipeline state to etcd: %w", err)

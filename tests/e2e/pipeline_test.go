@@ -174,14 +174,13 @@ func (m *MockKeyProvider) Close() error {
 
 // MockStateManager implements manager.StateManager
 type MockStateManager struct {
+	mu        sync.RWMutex
 	pipelines map[string][]byte
-	workers   map[string][]byte
 }
 
 func NewMockStateManager() *MockStateManager {
 	return &MockStateManager{
 		pipelines: make(map[string][]byte),
-		workers:   make(map[string][]byte),
 	}
 }
 
@@ -189,7 +188,9 @@ func (m *MockStateManager) Close() error {
 	return nil
 }
 
-func (m *MockStateManager) SavePipeline(ctx context.Context, pipelineID string, state any) error {
+func (m *MockStateManager) SavePipeline(ctx context.Context, pipelineID string, state *manager.PipelineState) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	data, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -199,55 +200,13 @@ func (m *MockStateManager) SavePipeline(ctx context.Context, pipelineID string, 
 }
 
 func (m *MockStateManager) GetPipeline(ctx context.Context, pipelineID string, dest any) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	data, ok := m.pipelines[pipelineID]
 	if !ok {
 		return fmt.Errorf("pipeline %s not found", pipelineID)
 	}
 	return json.Unmarshal(data, dest)
-}
-
-func (m *MockStateManager) DeletePipeline(ctx context.Context, pipelineID string) error {
-	delete(m.pipelines, pipelineID)
-	return nil
-}
-
-func (m *MockStateManager) ListPipelines(ctx context.Context) ([]string, error) {
-	var ids []string
-	for id := range m.pipelines {
-		ids = append(ids, id)
-	}
-	return ids, nil
-}
-
-func (m *MockStateManager) SaveWorker(ctx context.Context, workerID string, state any) error {
-	data, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	m.workers[workerID] = data
-	return nil
-}
-
-func (m *MockStateManager) GetWorker(ctx context.Context, workerID string, dest any) error {
-	data, ok := m.workers[workerID]
-	if !ok {
-		return fmt.Errorf("worker %s not found", workerID)
-	}
-	return json.Unmarshal(data, dest)
-}
-
-func (m *MockStateManager) DeleteWorker(ctx context.Context, workerID string) error {
-	delete(m.workers, workerID)
-	return nil
-}
-
-func (m *MockStateManager) ListWorkers(ctx context.Context) (map[string][]byte, error) {
-	// Return a copy to avoid race conditions if caller modifies it
-	workers := make(map[string][]byte)
-	for k, v := range m.workers {
-		workers[k] = v
-	}
-	return workers, nil
 }
 
 // createTestConfig creates a test configuration using the new structure

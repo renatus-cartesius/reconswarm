@@ -35,6 +35,7 @@ type PipelineState struct {
 	StartTime       time.Time
 	EndTime         time.Time
 	Pipeline        *pipeline.Pipeline
+	Workers         []*Worker
 }
 
 // PipelineManager manages pipeline execution
@@ -145,6 +146,9 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 	pool := pond.NewPool(workersCount)
 	ctx := context.Background()
 
+	var workersMu sync.Mutex
+	var workers []*Worker
+
 	// Process each chunk: create ephemeral worker -> execute -> delete worker
 	for chunk := range slices.Chunk(targetsList, (len(targetsList)+workersCount-1)/workersCount) {
 		pool.Submit(func() {
@@ -154,6 +158,10 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 				logging.Logger().Error("failed to create ephemeral worker", zap.Error(err))
 				return
 			}
+
+			workersMu.Lock()
+			workers = append(workers, worker)
+			workersMu.Unlock()
 
 			// Always delete worker after execution
 			defer func() {
@@ -177,10 +185,24 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 		})
 	}
 
+	pm.saveWorkers(id, workers)
+	pm.updateStatus(id, PipelineStatusCompleted, "")
+
 	pool.StopAndWait()
 
-	pm.updateStatus(id, PipelineStatusCompleted, "")
 	logging.Logger().Info("Pipeline execution completed", zap.String("pipeline_id", id))
+}
+
+func (pm *PipelineManager) saveWorkers(id string, workers []*Worker) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if state, exists := pm.pipelines[id]; exists {
+		state.Workers = workers
+		if err := pm.stateManager.SavePipeline(context.Background(), id, state); err != nil {
+			logging.Logger().Error("failed to save pipeline state with workers", zap.Error(err))
+		}
+	}
 }
 
 func (pm *PipelineManager) updateStatus(id string, status PipelineStatus, errMsg string) {

@@ -21,7 +21,6 @@ import (
 type Server struct {
 	api.UnimplementedReconSwarmServer
 	pipelineManager *manager.PipelineManager
-	workerManager   *manager.WorkerManager
 	stateManager    manager.StateManager
 	config          config.Config
 }
@@ -54,17 +53,15 @@ func NewServer(cfg config.Config) (*Server, error) {
 
 	return &Server{
 		pipelineManager: pm,
-		workerManager:   wm,
 		stateManager:    sm,
 		config:          cfg,
 	}, nil
 }
 
 // NewServerWithDependencies creates a new Server with injected dependencies (for testing)
-func NewServerWithDependencies(pm *manager.PipelineManager, wm *manager.WorkerManager, sm manager.StateManager) *Server {
+func NewServerWithDependencies(pm *manager.PipelineManager, sm manager.StateManager) *Server {
 	return &Server{
 		pipelineManager: pm,
-		workerManager:   wm,
 		stateManager:    sm,
 	}
 }
@@ -112,17 +109,13 @@ func (s *Server) GetPipeline(ctx context.Context, req *api.GetPipelineRequest) (
 		resp.Pipeline = pipelineToProto(*state.Pipeline)
 	}
 
-	// Add worker status
-	workers := s.workerManager.GetStatus()
-	for _, w := range workers {
-		if w.CurrentTask == req.PipelineId || w.Status == manager.WorkerStatusIdle {
-			resp.Workers = append(resp.Workers, &api.Worker{
-				WorkerId:    w.ID,
-				Name:        w.Name,
-				Status:      string(w.Status),
-				CurrentTask: w.CurrentTask,
-			})
-		}
+	// Workers are bound to the pipeline state
+	for _, w := range state.Workers {
+		resp.Workers = append(resp.Workers, &api.Worker{
+			WorkerId: w.ID,
+			Name:     w.Name,
+			Status:   string(w.Status),
+		})
 	}
 
 	return resp, nil

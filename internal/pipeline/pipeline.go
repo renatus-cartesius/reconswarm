@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"reconswarm/internal/control"
@@ -21,8 +22,8 @@ type Pipeline struct {
 // Target represents a target source for the pipeline.
 // It defines how to obtain targets (from a list, external URL, crt.sh, etc.)
 type Target struct {
-	Type  string `yaml:"type,omitempty"`
-	Value any    `yaml:"value,omitempty"`
+	Type  string `yaml:"type,omitempty" json:"type,omitempty"`
+	Value any    `yaml:"value,omitempty" json:"value,omitempty"`
 }
 
 // Stage defines the interface for pipeline stages
@@ -77,6 +78,86 @@ func (p *Pipeline) UnmarshalYAML(node *yaml.Node) error {
 		}
 
 		p.Stages = append(p.Stages, stage)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for Pipeline.
+// Serializes Stage interface slice using a type-discriminated format.
+func (p Pipeline) MarshalJSON() ([]byte, error) {
+	type rawStage struct {
+		Name  string   `json:"name"`
+		Type  string   `json:"type"`
+		Steps []string `json:"steps,omitempty"`
+		Src   string   `json:"src,omitempty"`
+		Dest  string   `json:"dest,omitempty"`
+	}
+
+	stages := make([]rawStage, 0, len(p.Stages))
+	for _, s := range p.Stages {
+		rs := rawStage{
+			Name: s.GetName(),
+			Type: s.GetType(),
+		}
+		switch v := s.(type) {
+		case *ExecStage:
+			rs.Steps = v.Steps
+		case *SyncStage:
+			rs.Src = v.Src
+			rs.Dest = v.Dest
+		}
+		stages = append(stages, rs)
+	}
+
+	return json.Marshal(struct {
+		Targets []Target   `json:"targets"`
+		Stages  []rawStage `json:"stages"`
+	}{
+		Targets: p.Targets,
+		Stages:  stages,
+	})
+}
+
+// UnmarshalJSON implements json.Unmarshaler for Pipeline.
+// Deserializes Stage interface slice using the "type" field as discriminator.
+func (p *Pipeline) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Targets []Target          `json:"targets"`
+		Stages  []json.RawMessage `json:"stages"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	p.Targets = raw.Targets
+	p.Stages = make([]Stage, 0, len(raw.Stages))
+
+	for _, stageData := range raw.Stages {
+		var meta struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(stageData, &meta); err != nil {
+			return fmt.Errorf("failed to decode stage type: %w", err)
+		}
+
+		switch meta.Type {
+		case "exec":
+			var s ExecStage
+			if err := json.Unmarshal(stageData, &s); err != nil {
+				return fmt.Errorf("failed to decode exec stage: %w", err)
+			}
+			p.Stages = append(p.Stages, &s)
+		case "sync":
+			var s SyncStage
+			if err := json.Unmarshal(stageData, &s); err != nil {
+				return fmt.Errorf("failed to decode sync stage: %w", err)
+			}
+			p.Stages = append(p.Stages, &s)
+		default:
+			return fmt.Errorf("unknown stage type: %s", meta.Type)
+		}
 	}
 
 	return nil

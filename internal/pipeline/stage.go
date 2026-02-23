@@ -14,17 +14,17 @@ import (
 
 // ExecStage represents an execution stage
 type ExecStage struct {
-	Name  string   `yaml:"name"`
-	Type  string   `yaml:"type"`
-	Steps []string `yaml:"steps"`
+	Name  string   `yaml:"name" json:"name"`
+	Type  string   `yaml:"type" json:"type"`
+	Steps []string `yaml:"steps" json:"steps"`
 }
 
 // SyncStage represents a file synchronization stage
 type SyncStage struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
-	Src  string `yaml:"src"`
-	Dest string `yaml:"dest"`
+	Name string `yaml:"name" json:"name"`
+	Type string `yaml:"type" json:"type"`
+	Src  string `yaml:"src" json:"src"`
+	Dest string `yaml:"dest" json:"dest"`
 }
 
 // GetName returns the stage name

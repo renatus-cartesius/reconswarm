@@ -29,10 +29,10 @@ type Worker struct {
 	Name        string
 	IP          string
 	Status      WorkerStatus
-	CurrentTask string // PipelineID or StageName
-	InstanceID  string // Cloud Provider Instance ID
-	Controller  control.Controller
-	Provisioner provisioning.Provisioner
+	CurrentTask string
+	InstanceID  string
+	Controller  control.Controller       `json:"-"`
+	Provisioner provisioning.Provisioner `json:"-"`
 }
 
 // WorkerManager manages the worker pool

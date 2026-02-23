@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"reconswarm/internal/logging"
 
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
+	"go.uber.org/zap"
 )
 
 // YcProvisioner implements the Provisioner interface for Yandex Cloud
@@ -86,6 +88,7 @@ func (p *YcProvisioner) Create(ctx context.Context, spec InstanceSpec) (*Instanc
 	}
 
 	// Create VM
+	logging.Logger().Debug("creating yandex cloud vm worker", zap.String("name", spec.Name))
 	pop, err := p.sdk.Compute().Instance().Create(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create VM: %w", err)
@@ -108,6 +111,8 @@ func (p *YcProvisioner) Create(ctx context.Context, spec InstanceSpec) (*Instanc
 		return nil, fmt.Errorf("failed to get response: %w", err)
 	}
 
+	logging.Logger().Debug("created yandex cloud vm worker", zap.String("name", spec.Name), zap.String("created_at", op.CreatedAt().String()))
+
 	instance := resp.(*compute.Instance)
 
 	// Get IP address
@@ -129,6 +134,8 @@ func (p *YcProvisioner) Create(ctx context.Context, spec InstanceSpec) (*Instanc
 
 // Delete deletes a VM by ID
 func (p *YcProvisioner) Delete(ctx context.Context, instanceID string) error {
+
+	logging.Logger().Debug("removing yandex cloud vm instance", zap.String("name", instanceID))
 	pop, err := p.sdk.Compute().Instance().Delete(ctx, &compute.DeleteInstanceRequest{
 		InstanceId: instanceID,
 	})

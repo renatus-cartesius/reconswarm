@@ -104,13 +104,11 @@ func (m *MockKeyProvider) Close() error {
 type MockStateManager struct {
 	mu        sync.RWMutex
 	pipelines map[string][]byte
-	workers   map[string][]byte
 }
 
 func NewMockStateManager() *MockStateManager {
 	return &MockStateManager{
 		pipelines: make(map[string][]byte),
-		workers:   make(map[string][]byte),
 	}
 }
 
@@ -118,7 +116,7 @@ func (m *MockStateManager) Close() error {
 	return nil
 }
 
-func (m *MockStateManager) SavePipeline(ctx context.Context, pipelineID string, state any) error {
+func (m *MockStateManager) SavePipeline(ctx context.Context, pipelineID string, state *manager.PipelineState) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	data, err := json.Marshal(state)
@@ -137,61 +135,6 @@ func (m *MockStateManager) GetPipeline(ctx context.Context, pipelineID string, d
 		return fmt.Errorf("pipeline %s not found", pipelineID)
 	}
 	return json.Unmarshal(data, dest)
-}
-
-func (m *MockStateManager) DeletePipeline(ctx context.Context, pipelineID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.pipelines, pipelineID)
-	return nil
-}
-
-func (m *MockStateManager) ListPipelines(ctx context.Context) ([]string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	var ids []string
-	for id := range m.pipelines {
-		ids = append(ids, id)
-	}
-	return ids, nil
-}
-
-func (m *MockStateManager) SaveWorker(ctx context.Context, workerID string, state any) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	data, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	m.workers[workerID] = data
-	return nil
-}
-
-func (m *MockStateManager) GetWorker(ctx context.Context, workerID string, dest any) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	data, ok := m.workers[workerID]
-	if !ok {
-		return fmt.Errorf("worker %s not found", workerID)
-	}
-	return json.Unmarshal(data, dest)
-}
-
-func (m *MockStateManager) DeleteWorker(ctx context.Context, workerID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.workers, workerID)
-	return nil
-}
-
-func (m *MockStateManager) ListWorkers(ctx context.Context) (map[string][]byte, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	workers := make(map[string][]byte)
-	for k, v := range m.workers {
-		workers[k] = v
-	}
-	return workers, nil
 }
 
 // createTestConfig creates a test configuration using the new structure
@@ -254,7 +197,7 @@ var _ = Describe("gRPC Server", func() {
 		pm := manager.NewPipelineManager(wm, mockSM)
 
 		// Create server with injected dependencies
-		reconServer := server.NewServerWithDependencies(pm, wm, mockSM)
+		reconServer := server.NewServerWithDependencies(pm, mockSM)
 		api.RegisterReconSwarmServer(srv, reconServer)
 
 		go func() {

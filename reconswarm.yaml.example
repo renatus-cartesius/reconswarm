@@ -30,6 +30,7 @@ provisioner:
   yandex_cloud:
     # Authentication (supports env vars: ${YC_TOKEN}, ${YC_FOLDER_ID})
     iam_token: "${YC_TOKEN}"
+    # key_path: "./sa_auth_key.json"
     folder_id: "${YC_FOLDER_ID}"
 
     # Default VM settings

@@ -2,8 +2,10 @@ package provisioning
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"reconswarm/internal/logging"
 
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
@@ -19,12 +21,34 @@ type YcProvisioner struct {
 }
 
 // NewYcProvisioner creates a new instance of YcProvisioner
-func NewYcProvisioner(iamToken, folderID string) (*YcProvisioner, error) {
+func NewYcProvisioner(iamToken, keyPath, folderID string) (*YcProvisioner, error) {
 	ctx := context.Background()
+
+	var creds ycsdk.Credentials
+
+	if iamToken != "" {
+		creds = ycsdk.NewIAMTokenCredentials(iamToken)
+		logging.Logger().Info("using iam token for yandex cloud provisioner")
+	} else {
+		keyFile, err := os.Open(keyPath)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := keyFile.Close(); err != nil {
+				logging.Logger().Error("error on closing key file", zap.Error(err))
+			}
+		}()
+
+		if err := json.NewDecoder(keyFile).Decode(creds); err != nil {
+			return nil, err
+		}
+		logging.Logger().Info("using authorized key file for yandex cloud provisioner")
+	}
 
 	// Create SDK client
 	sdk, err := ycsdk.Build(ctx, ycsdk.Config{
-		Credentials: ycsdk.NewIAMTokenCredentials(iamToken),
+		Credentials: creds,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SDK: %w", err)

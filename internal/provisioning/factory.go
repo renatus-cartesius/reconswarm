@@ -16,7 +16,7 @@ func NewProvisioner(cfg config.ProvisionerConfig) (Provisioner, error) {
 		if cfg.YandexCloud == nil {
 			return nil, fmt.Errorf("yandex_cloud config is nil")
 		}
-		return NewYcProvisioner(cfg.YandexCloud.IAMToken, cfg.YandexCloud.FolderID)
+		return NewYcProvisioner(cfg.YandexCloud.IAMToken, cfg.YandexCloud.KeyPath, cfg.YandexCloud.FolderID)
 
 	case config.ProviderGCP:
 		if cfg.GCP == nil {
@@ -108,5 +108,3 @@ func GetVMDefaults(cfg config.ProvisionerConfig) VMDefaults {
 		DiskSize: 20,
 	}
 }
-
-

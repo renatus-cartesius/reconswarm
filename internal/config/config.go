@@ -60,6 +60,7 @@ const (
 type YandexCloudConfig struct {
 	// Authentication
 	IAMToken string `yaml:"iam_token"`
+	KeyPath  string `yaml:"key_path"`
 	FolderID string `yaml:"folder_id"`
 
 	// VM defaults

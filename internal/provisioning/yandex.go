@@ -2,15 +2,14 @@ package provisioning
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"reconswarm/internal/logging"
 
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
+	"github.com/yandex-cloud/go-sdk/iamkey"
 	"go.uber.org/zap"
 )
 
@@ -30,18 +29,13 @@ func NewYcProvisioner(iamToken, keyPath, folderID string) (*YcProvisioner, error
 		creds = ycsdk.NewIAMTokenCredentials(iamToken)
 		logging.Logger().Info("using iam token for yandex cloud provisioner")
 	} else {
-		keyFile, err := os.Open(keyPath)
+		key, err := iamkey.ReadFromJSONFile(keyPath)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read authorized key file: %w", err)
 		}
-		defer func() {
-			if err := keyFile.Close(); err != nil {
-				logging.Logger().Error("error on closing key file", zap.Error(err))
-			}
-		}()
-
-		if err := json.NewDecoder(keyFile).Decode(creds); err != nil {
-			return nil, err
+		creds, err = ycsdk.ServiceAccountKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("service account key credentials: %w", err)
 		}
 		logging.Logger().Info("using authorized key file for yandex cloud provisioner")
 	}

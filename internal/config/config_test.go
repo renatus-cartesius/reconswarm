@@ -37,8 +37,8 @@ workers:
 		}
 	})
 
-	// Test: missing iam_token should fail
-	t.Run("missing iam_token", func(t *testing.T) {
+	// Test: missing both iam_token and key_path should fail
+	t.Run("missing iam_token and key_path", func(t *testing.T) {
 		config := `
 server:
   port: 50051
@@ -58,7 +58,46 @@ workers:
 
 		_, err := LoadFromFile(configPath)
 		if err == nil {
-			t.Error("Expected error for missing iam_token")
+			t.Error("Expected error for missing iam_token and key_path")
+		}
+	})
+
+	// Test: valid config with key_path (authorized key) instead of iam_token
+	t.Run("valid config with key_path", func(t *testing.T) {
+		keyPath := filepath.Join(tmpDir, "sa-key.json")
+		if err := os.WriteFile(keyPath, []byte(`{"id":"x","service_account_id":"y","private_key":"z"}`), 0644); err != nil {
+			t.Fatalf("failed to write key_path fixture: %v", err)
+		}
+		config := `
+server:
+  port: 50051
+etcd:
+  endpoints:
+    - "localhost:2379"
+provisioner:
+  type: yandex_cloud
+  yandex_cloud:
+    key_path: "` + keyPath + `"
+    folder_id: "test-folder"
+workers:
+  max_workers: 5
+`
+		if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
+			t.Fatalf("failed to write temp config: %v", err)
+		}
+
+		cfg, err := LoadFromFile(configPath)
+		if err != nil {
+			t.Fatalf("Expected valid config with key_path to load, got error: %v", err)
+		}
+		if cfg.Provisioner.Type != ProviderYandexCloud || cfg.Provisioner.YandexCloud == nil {
+			t.Errorf("expected yandex_cloud provisioner")
+		}
+		if cfg.Provisioner.YandexCloud.KeyPath != keyPath {
+			t.Errorf("key_path = %q, want %q", cfg.Provisioner.YandexCloud.KeyPath, keyPath)
+		}
+		if cfg.Provisioner.YandexCloud.FolderID != "test-folder" {
+			t.Errorf("folder_id = %q, want test-folder", cfg.Provisioner.YandexCloud.FolderID)
 		}
 	})
 

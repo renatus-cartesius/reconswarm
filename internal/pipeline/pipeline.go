@@ -30,7 +30,7 @@ type Target struct {
 type Stage interface {
 	GetName() string
 	GetType() string
-	Execute(ctx context.Context, controller control.Controller, targets []string, targetsFile string) error
+	Execute(ctx context.Context, controller control.Controller, templateContext *TemplateContext) error
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface for Pipeline

@@ -15,7 +15,7 @@ pipeline:
     - name: "Copy results file"
       type: sync
       src: "/opt/recon/nuclei-{{.Worker.Name}}.json"
-      dest: "./results/nuclei-{{.Worker.Name}}.json"
+      dest: "./results/{{.PipelineID}}/nuclei-{{.Worker.Name}}.json"
     # Example: Sync entire directory recursively
     # - name: "Copy all results"
     #   type: sync

@@ -16,6 +16,13 @@ ReconSwarm is suitable for bug bounty hunters, penetration testers, DevSecOps en
 - **Flexible pipeline stages** — Extensible stage system currently supporting exec (command execution) and sync (file and directory synchronization) operations
 - **Template context in steps** — Flexible way to pass metadata from execution context to steps
 
+## Must have features to do
+
+- **Web UI** - a simple web based user-friendly ui for fast interation
+- **Realtime logs from stages** - capture stdout/stderr in send to client via grpc streaming
+- **Remote shell to workers** - openning ssh connection from client to workers through rs server
+- **Findings stage** - a stage for processing data received from previous stage(eg. nuclei json result), storing it in etcd and making notifications
+
 ## Architecture
 
 ReconSwarm follows a modular architecture with clear separation of concerns between cloud provisioning, remote system control, pipeline execution, and configuration management.
@@ -525,18 +532,18 @@ task ci         # Run all CI checks
 
 ### Additional Target Sources
 
-- [ ] Add passing targets from evaluating shell(for using cook, radamsa or literally all available tools):
+- [x] Add passing targets from evaluating shell(for using cook, radamsa or literally all available tools):
     - [ ] evaluating targets on client and pass through grpc call (overheaded by network on big inputs)
-    - [ ] evaluating on server (need to use dependencies in server environment)
+    - [x] evaluating on server (need to use dependencies in server environment)
 - [ ] Add DNSDumpster target source
 - [ ] Add Censys target source
 - [ ] Add Shodan target source
 
 ### Stateful runs
 
-- [ ] Add save of run state
+- [x] Add save of run state
     - [ ] Resolved target list
-    - [ ] Working and ended workers
+    - [x] Working and ended workers
 
 ### Multi-Cloud Provider Support
 

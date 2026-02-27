@@ -9,6 +9,7 @@ import (
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/compute/v1"
 	"github.com/yandex-cloud/go-genproto/yandex/cloud/vpc/v1"
 	ycsdk "github.com/yandex-cloud/go-sdk"
+	"github.com/yandex-cloud/go-sdk/iamkey"
 	"go.uber.org/zap"
 )
 
@@ -19,12 +20,29 @@ type YcProvisioner struct {
 }
 
 // NewYcProvisioner creates a new instance of YcProvisioner
-func NewYcProvisioner(iamToken, folderID string) (*YcProvisioner, error) {
+func NewYcProvisioner(iamToken, keyPath, folderID string) (*YcProvisioner, error) {
 	ctx := context.Background()
+
+	var creds ycsdk.Credentials
+
+	if iamToken != "" {
+		creds = ycsdk.NewIAMTokenCredentials(iamToken)
+		logging.Logger().Info("using iam token for yandex cloud provisioner")
+	} else {
+		key, err := iamkey.ReadFromJSONFile(keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("read authorized key file: %w", err)
+		}
+		creds, err = ycsdk.ServiceAccountKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("service account key credentials: %w", err)
+		}
+		logging.Logger().Info("using authorized key file for yandex cloud provisioner")
+	}
 
 	// Create SDK client
 	sdk, err := ycsdk.Build(ctx, ycsdk.Config{
-		Credentials: ycsdk.NewIAMTokenCredentials(iamToken),
+		Credentials: creds,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SDK: %w", err)

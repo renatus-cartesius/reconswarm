@@ -29,6 +29,7 @@ provisioner:
   type: yandex_cloud  # Discriminator field
   yandex_cloud:       # Active when type: yandex_cloud
     iam_token: "${YC_TOKEN}"
+    # key_path: "./sa_auth_key.json"
     folder_id: "${YC_FOLDER_ID}"
     # ... provider-specific settings
 ```
@@ -130,6 +131,7 @@ provisioner:
   # Yandex Cloud configuration (active when type: yandex_cloud)
   yandex_cloud:
     iam_token: "${YC_TOKEN}"
+    # key_path: "./sa_auth_key.json"
     folder_id: "${YC_FOLDER_ID}"
     default_zone: "ru-central1-b"
     default_image: "fd8b1cmhmncn7lt4tqn4"
@@ -223,6 +225,7 @@ For Yandex Cloud integration, use the provided setup script:
      type: yandex_cloud
      yandex_cloud:
        iam_token: "${YC_TOKEN}"
+       # key_path: "./sa_auth_key.json"
        folder_id: "${YC_FOLDER_ID}"
    ```
 

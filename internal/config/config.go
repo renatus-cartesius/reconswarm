@@ -60,6 +60,7 @@ const (
 type YandexCloudConfig struct {
 	// Authentication
 	IAMToken string `yaml:"iam_token"`
+	KeyPath  string `yaml:"key_path"`
 	FolderID string `yaml:"folder_id"`
 
 	// VM defaults
@@ -145,8 +146,8 @@ func (p *ProvisionerConfig) Validate() error {
 
 // Validate validates Yandex Cloud configuration
 func (c *YandexCloudConfig) Validate() error {
-	if c.IAMToken == "" {
-		return fmt.Errorf("yandex_cloud.iam_token is required")
+	if c.IAMToken == "" && c.KeyPath == "" {
+		return fmt.Errorf("must specified either yandex_cloud.iam_token or yandex_cloud.key_path")
 	}
 	if c.FolderID == "" {
 		return fmt.Errorf("yandex_cloud.folder_id is required")

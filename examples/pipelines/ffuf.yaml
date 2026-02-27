@@ -18,4 +18,4 @@ pipeline:
     - name: "Sync results"
       type: sync
       src: "/opt/recon/results"
-      dest: "/opt/results/{{.Worker.Name}}"
+      dest: "/opt/results/{{.PipelineID}}/{{.Worker.Name}}"

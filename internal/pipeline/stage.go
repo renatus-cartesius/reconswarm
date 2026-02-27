@@ -12,6 +12,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// TemplateContext represents the template context for stage execution
+type TemplateContext struct {
+	Targets    map[string]interface{} `yaml:"targets" json:"targets"`
+	Worker     map[string]interface{} `yaml:"worker" json:"worker"`
+	PipelineID string                 `yaml:"pipeline_id" json:"pipeline_id"`
+	Timestamp  int64                  `yaml:"timestamp" json:"timestamp"`
+}
+
 // ExecStage represents an execution stage
 type ExecStage struct {
 	Name  string   `yaml:"name" json:"name"`
@@ -48,20 +56,9 @@ func (s *SyncStage) GetType() string {
 }
 
 // Execute executes the exec stage
-func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, targets []string, targetsFile string) error {
+func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, templateContext *TemplateContext) error {
 
 	logging.Logger().Debug("executing exec stage", zap.String("stage_name", e.Name))
-
-	// Create template context
-	templateContext := map[string]interface{}{
-		"Targets": map[string]interface{}{
-			"filepath": targetsFile,
-			"list":     targets,
-		},
-		"Worker": map[string]interface{}{
-			"Name": ctrl.GetInstanceName(),
-		},
-	}
 
 	// Execute each step in the stage
 	for stepIndex, stepTemplate := range e.Steps {
@@ -89,23 +86,13 @@ func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, target
 }
 
 // Execute executes the sync stage
-func (s *SyncStage) Execute(ctx context.Context, ctrl control.Controller, targets []string, targetsFile string) error {
+func (s *SyncStage) Execute(ctx context.Context, ctrl control.Controller, templateContext *TemplateContext) error {
 
 	logging.Logger().Debug("executing sync stage", zap.String("stage_name", s.Name))
 
-	// Create template context
-	templateContext := map[string]interface{}{
-		"Targets": map[string]interface{}{
-			"filepath": targetsFile,
-			"list":     targets,
-		},
-		"Worker": map[string]interface{}{
-			"Name": ctrl.GetInstanceName(),
-		},
-	}
-
 	// Render source path template
 	renderedSrc, err := RenderTemplate(s.Src, templateContext)
+
 	if err != nil {
 		return fmt.Errorf("failed to render source path template: %w", err)
 	}
@@ -130,7 +117,7 @@ func (s *SyncStage) Execute(ctx context.Context, ctrl control.Controller, target
 }
 
 // RenderTemplate renders a Go template with the given context
-func RenderTemplate(templateStr string, context map[string]interface{}) (string, error) {
+func RenderTemplate(templateStr string, context interface{}) (string, error) {
 	tmpl, err := template.New("command").Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)

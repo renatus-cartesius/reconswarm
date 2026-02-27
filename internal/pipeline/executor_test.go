@@ -142,7 +142,16 @@ func TestExecuteExecStage_BasicTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com"}
 	targetsFile := "/opt/recon/targets-20231201-120000.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -182,7 +191,16 @@ func TestExecuteExecStage_TargetsTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com", "demo.org"}
 	targetsFile := "/opt/recon/targets-20231201-120000.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -222,7 +240,16 @@ func TestExecuteExecStage_ComplexTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com"}
 	targetsFile := "/opt/recon/targets-20231201-120000.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -259,7 +286,16 @@ func TestExecuteExecStage_EmptySteps(t *testing.T) {
 	targets := []string{"example.com"}
 	targetsFile := "/opt/recon/targets.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err != nil {
 		t.Fatalf("Failed to execute exec stage: %v", err)
 	}
@@ -287,7 +323,16 @@ func TestExecuteExecStage_InvalidTemplate(t *testing.T) {
 	targets := []string{"example.com"}
 	targetsFile := "/opt/recon/targets.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err == nil {
 		t.Error("Expected error for invalid template, but got none")
 	}
@@ -389,7 +434,16 @@ func TestExecuteSyncStage_BasicSync(t *testing.T) {
 	targets := []string{"example.com", "test.com"}
 	targetsFile := "/opt/recon/targets-1234567890.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err != nil {
 		t.Fatalf("Failed to execute sync stage: %v", err)
 	}
@@ -427,7 +481,16 @@ func TestExecuteSyncStage_TargetsTemplate(t *testing.T) {
 	targets := []string{"example.com", "test.com", "demo.org"}
 	targetsFile := "/opt/recon/targets-1234567890.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err != nil {
 		t.Fatalf("Failed to execute sync stage: %v", err)
 	}
@@ -465,7 +528,16 @@ func TestExecuteSyncStage_InvalidTemplate(t *testing.T) {
 	targets := []string{"example.com"}
 	targetsFile := "/opt/recon/targets.txt"
 
-	err := stage.Execute(context.Background(), controller, targets, targetsFile)
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": targetsFile,
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+	err := stage.Execute(context.Background(), controller, templateContext)
 	if err == nil {
 		t.Error("Expected error for invalid template, but got none")
 	}
@@ -514,7 +586,7 @@ func TestOpenFile_WriteTargetsFile(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, p, targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets, "test-pipeline-123")
 	if err != nil {
 		t.Fatalf("Failed to execute: %v", err)
 	}
@@ -565,7 +637,7 @@ func TestOpenFile_ErrorHandling(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, p, targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets, "test-pipeline-123")
 	if err == nil {
 		t.Fatal("Expected error when OpenFile fails, but got nil")
 	}
@@ -596,7 +668,7 @@ func TestOpenFile_CalledWithCorrectFlags(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, p, targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets, "test-pipeline-123")
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -641,7 +713,7 @@ func TestOpenFile_MultipleTargets(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, p, targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets, "test-pipeline-123")
 	if err != nil {
 		t.Fatalf("Failed to execute with many targets: %v", err)
 	}
@@ -687,7 +759,7 @@ func TestOpenFile_SpecialCharactersInTargets(t *testing.T) {
 		},
 	}
 
-	err := ExecuteOnWorker(context.Background(), controller, p, targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets, "test-pipeline-123")
 	if err != nil {
 		t.Fatalf("Failed to execute with special characters: %v", err)
 	}
@@ -733,7 +805,7 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 
 	targets := []string{"example.com", "test.com", "demo.org"}
 
-	err := ExecuteOnWorker(context.Background(), controller, p, targets)
+	err := ExecuteOnWorker(context.Background(), controller, p, targets, "test-pipeline-123")
 	if err != nil {
 		t.Fatalf("Failed to run stages: %v", err)
 	}
@@ -758,5 +830,108 @@ func TestExecuteOnWorker_CompleteFlow(t *testing.T) {
 	}
 	if !foundStageCommand {
 		t.Error("Expected stage command not found")
+	}
+}
+
+func TestTemplateContext_PipelineIDInTemplate(t *testing.T) {
+	controller := &mockController{
+		instanceName: "test-worker-id",
+		commands:     []string{},
+		syncedFiles:  []syncedFile{},
+	}
+
+	stage := &ExecStage{
+		Name: "Pipeline ID Test Stage",
+		Type: "exec",
+		Steps: []string{
+			"echo 'Pipeline ID: {{.PipelineID}}'",
+			"echo 'Timestamp: {{.Timestamp}}'",
+		},
+	}
+
+	targets := []string{"example.com"}
+	pipelineID := "custom-pipeline-789"
+
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": "/opt/recon/targets.txt",
+			"list":     targets,
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+		PipelineID: pipelineID,
+		Timestamp:  1234567890,
+	}
+
+	err := stage.Execute(context.Background(), controller, templateContext)
+	if err != nil {
+		t.Fatalf("Failed to execute stage: %v", err)
+	}
+
+	expectedCommands := []string{
+		"echo 'Pipeline ID: custom-pipeline-789'",
+		"echo 'Timestamp: 1234567890'",
+	}
+
+	if len(controller.commands) != len(expectedCommands) {
+		t.Fatalf("Expected %d commands, got %d", len(expectedCommands), len(controller.commands))
+	}
+
+	for i, expected := range expectedCommands {
+		if controller.commands[i] != expected {
+			t.Errorf("Command %d: expected '%s', got '%s'", i, expected, controller.commands[i])
+		}
+	}
+}
+
+func TestTemplateContext_AllFieldsRender(t *testing.T) {
+	controller := &mockController{
+		instanceName: "ctx-worker",
+		commands:     []string{},
+		syncedFiles:  []syncedFile{},
+	}
+
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": "/opt/recon/targets-123.txt",
+			"list":     []string{"host1.com", "host2.com", "host3.com"},
+		},
+		Worker: map[string]interface{}{
+			"Name": "test-worker",
+		},
+		PipelineID: "pipeline-abc-123",
+		Timestamp:  1700000000,
+	}
+
+	stage := &ExecStage{
+		Name: "Complete Context Test",
+		Type: "exec",
+		Steps: []string{
+			"echo 'Working on {{.PipelineID}} at {{.Timestamp}} for {{len .Targets.list}} targets'",
+			"echo 'Targets file: {{.Targets.filepath}}'",
+			"echo 'Worker: {{.Worker.Name}}'",
+		},
+	}
+
+	err := stage.Execute(context.Background(), controller, templateContext)
+	if err != nil {
+		t.Fatalf("Failed to execute stage: %v", err)
+	}
+
+	expectedCommands := []string{
+		"echo 'Working on pipeline-abc-123 at 1700000000 for 3 targets'",
+		"echo 'Targets file: /opt/recon/targets-123.txt'",
+		"echo 'Worker: test-worker'",
+	}
+
+	if len(controller.commands) != len(expectedCommands) {
+		t.Fatalf("Expected %d commands, got %d", len(expectedCommands), len(controller.commands))
+	}
+
+	for i, expected := range expectedCommands {
+		if controller.commands[i] != expected {
+			t.Errorf("Command %d: expected '%s', got '%s'", i, expected, controller.commands[i])
+		}
 	}
 }

@@ -172,7 +172,7 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 			}()
 
 			// Execute pipeline on worker
-			if err := pipeline.ExecuteOnWorker(ctx, worker.Controller, p, chunk); err != nil {
+			if err := pipeline.ExecuteOnWorker(ctx, worker.Controller, p, chunk, id); err != nil {
 				logging.Logger().Error("pipeline execution failed on worker",
 					zap.String("worker_name", worker.Name),
 					zap.Error(err))

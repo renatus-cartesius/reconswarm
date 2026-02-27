@@ -14,7 +14,7 @@ import (
 )
 
 // ExecuteOnWorker executes all pipeline stages on a worker with the given targets.
-func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipeline, workerTargets []string) error {
+func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipeline, workerTargets []string, pipelineID string) error {
 	logging.Logger().Info("starting pipeline stages execution",
 		zap.Int("stages_count", len(p.Stages)),
 		zap.Int("targets_count", len(workerTargets)),
@@ -44,8 +44,21 @@ func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipel
 			zap.String("stage_name", stage.GetName()),
 			zap.String("stage_type", stage.GetType()))
 
+		// Create template context
+		templateContext := &TemplateContext{
+			Targets: map[string]interface{}{
+				"filepath": targetsFile,
+				"list":     workerTargets,
+			},
+			Worker: map[string]interface{}{
+				"Name": controller.GetInstanceName(),
+			},
+			PipelineID: pipelineID,
+			Timestamp:  timestamp,
+		}
+
 		// Execute the stage using the interface
-		if err := stage.Execute(ctx, controller, workerTargets, targetsFile); err != nil {
+		if err := stage.Execute(ctx, controller, templateContext); err != nil {
 			return fmt.Errorf("failed to execute stage '%s': %w", stage.GetName(), err)
 		}
 

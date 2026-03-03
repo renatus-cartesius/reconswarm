@@ -28,7 +28,7 @@ func ExecuteOnWorker(ctx context.Context, controller control.Controller, p Pipel
 
 	// Create targets file with timestamp
 	timestamp := time.Now().Unix()
-	targetsFile := fmt.Sprintf("/opt/recon/targets-%d.txt", timestamp)
+	targetsFile := fmt.Sprintf("/opt/recon/targets-%s.txt", controller.GetInstanceName())
 
 	logging.Logger().Info("creating targets file", zap.String("file", targetsFile))
 

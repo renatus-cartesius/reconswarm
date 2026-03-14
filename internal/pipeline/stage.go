@@ -14,17 +14,18 @@ import (
 
 // TemplateContext represents the template context for stage execution
 type TemplateContext struct {
-	Targets    map[string]interface{} `yaml:"targets" json:"targets"`
-	Worker     map[string]interface{} `yaml:"worker" json:"worker"`
-	PipelineID string                 `yaml:"pipeline_id" json:"pipeline_id"`
-	Timestamp  int64                  `yaml:"timestamp" json:"timestamp"`
+	Targets    map[string]any `yaml:"targets" json:"targets"`
+	Worker     map[string]any `yaml:"worker" json:"worker"`
+	PipelineID string         `yaml:"pipeline_id" json:"pipeline_id"`
+	Timestamp  int64          `yaml:"timestamp" json:"timestamp"`
 }
 
 // ExecStage represents an execution stage
 type ExecStage struct {
-	Name  string   `yaml:"name" json:"name"`
-	Type  string   `yaml:"type" json:"type"`
-	Steps []string `yaml:"steps" json:"steps"`
+	Name       string   `yaml:"name" json:"name"`
+	Type       string   `yaml:"type" json:"type"`
+	Steps      []string `yaml:"steps" json:"steps"`
+	IgnoreFail bool     `yaml:"ignore_fail" json:"ignore_fail"`
 }
 
 // SyncStage represents a file synchronization stage
@@ -76,7 +77,11 @@ func (e *ExecStage) Execute(ctx context.Context, ctrl control.Controller, templa
 
 		// Execute the rendered command
 		if err := ctrl.Run(renderedCommand); err != nil {
-			return fmt.Errorf("failed to execute step %d: %w", stepIndex+1, err)
+			if !e.IgnoreFail {
+				return fmt.Errorf("failed to execute step %d: %w", stepIndex+1, err)
+			}
+
+			logging.Logger().Error("ignoring failed step exection, since ignore_fail is true: %d: %w", zap.Int("step_index", stepIndex+1), zap.Error(err))
 		}
 
 		logging.Logger().Debug("step completed successfully", zap.Int("step_index", stepIndex+1))
@@ -117,14 +122,14 @@ func (s *SyncStage) Execute(ctx context.Context, ctrl control.Controller, templa
 }
 
 // RenderTemplate renders a Go template with the given context
-func RenderTemplate(templateStr string, context interface{}) (string, error) {
+func RenderTemplate(templateStr string, templateContext any) (string, error) {
 	tmpl, err := template.New("command").Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, context); err != nil {
+	if err := tmpl.Execute(&buf, templateContext); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 

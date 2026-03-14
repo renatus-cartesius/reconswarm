@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"os/exec"
 	"reconswarm/internal/logging"
 	"reconswarm/internal/pipeline"
 	"slices"
@@ -89,7 +91,7 @@ func (pm *PipelineManager) SubmitPipeline(ctx context.Context, p pipeline.Pipeli
 	}
 
 	// Start execution in background
-	go pm.runPipeline(id, p)
+	go pm.runPipeline(ctx, id, p)
 
 	return id, nil
 }
@@ -117,10 +119,39 @@ func (pm *PipelineManager) GetStatus(ctx context.Context, id string) (*PipelineS
 	return &stateCopy, nil
 }
 
-func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
+func runLocalShellCommands(ctx context.Context, cmds []string) error {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	for _, cmd := range cmds {
+		out, err := exec.CommandContext(ctx, shell, "-c", cmd).Output()
+		if err != nil {
+			logging.Logger().Error("error running command on the server", zap.String("output", logging.Truncate(string(out))), zap.Error(err))
+			return err
+		}
+		logging.Logger().Debug("executed command on the server", zap.String("output", logging.Truncate(string(out))))
+	}
+
+	return nil
+}
+
+func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipeline.Pipeline) {
 	logging.Logger().Info("Starting pipeline execution", zap.String("pipeline_id", id))
 
 	pm.updateStatus(id, PipelineStatusRunning, "")
+
+	if len(p.PreCommands) > 0 {
+		// Running pipeline server pre commands
+		logging.Logger().Debug("running pre commands on the server", zap.Strings("commands", logging.TruncateSlice(p.PreCommands, 1000)))
+		preCtx, preCancel := context.WithTimeout(ctx, 5*time.Minute) // setting hard timeout for pre commands in 5 minutes
+		defer preCancel()
+		if err := runLocalShellCommands(preCtx, p.PreCommands); err != nil {
+			logging.Logger().Error("error running pre commands on the server")
+			return
+		}
+	}
 
 	// Compile targets using pipeline layer (which uses recon utilities)
 	targetsList := pipeline.CompileTargets(p)
@@ -144,7 +175,6 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 
 	// Create worker pool with concurrency limit
 	pool := pond.NewPool(workersCount)
-	ctx := context.Background()
 
 	var workersMu sync.Mutex
 	var workers []*Worker
@@ -189,6 +219,17 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 	pm.updateStatus(id, PipelineStatusCompleted, "")
 
 	pool.StopAndWait()
+
+	if len(p.PostCommands) > 0 {
+		// Running pipeline server post commands
+		logging.Logger().Debug("running post commands on the server", zap.Strings("commands", logging.TruncateSlice(p.PostCommands, 1000)))
+		postCtx, postCancel := context.WithTimeout(ctx, 5*time.Minute) // setting hard timeout for post commands in 5 minutes
+		defer postCancel()
+		if err := runLocalShellCommands(postCtx, p.PostCommands); err != nil {
+			logging.Logger().Error("error running post commands on the server")
+			return
+		}
+	}
 
 	logging.Logger().Info("Pipeline execution completed", zap.String("pipeline_id", id))
 }

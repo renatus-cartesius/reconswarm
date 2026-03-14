@@ -935,3 +935,50 @@ func TestTemplateContext_AllFieldsRender(t *testing.T) {
 		}
 	}
 }
+
+func TestExecStage_IgnoreFail(t *testing.T) {
+	controller := &mockController{
+		instanceName: "test-worker",
+		commands:     []string{},
+		syncedFiles:  []syncedFile{},
+	}
+
+	// Test stage with ignore_fail = true
+	stage := &ExecStage{
+		Name:       "Failing Stage",
+		Type:       "exec",
+		Steps:      []string{"false", "echo 'This should execute'"},
+		IgnoreFail: true,
+	}
+
+	templateContext := &TemplateContext{
+		Targets: map[string]interface{}{
+			"filepath": "/opt/recon/targets.txt",
+		},
+		Worker: map[string]interface{}{
+			"Name": controller.GetInstanceName(),
+		},
+	}
+
+	// This should NOT fail even though 'false' command fails
+	err := stage.Execute(context.Background(), controller, templateContext)
+	if err != nil {
+		t.Errorf("Expected no error with ignore_fail=true, but got: %v", err)
+	}
+
+	// Verify both commands were executed
+	if len(controller.commands) != 2 {
+		t.Errorf("Expected 2 commands to be executed, got %d", len(controller.commands))
+	}
+
+	expectedCommands := []string{
+		"false",
+		"echo 'This should execute'",
+	}
+
+	for i, expected := range expectedCommands {
+		if controller.commands[i] != expected {
+			t.Errorf("Command %d: expected '%s', got '%s'", i, expected, controller.commands[i])
+		}
+	}
+}

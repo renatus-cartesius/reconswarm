@@ -119,14 +119,21 @@ func (pm *PipelineManager) GetStatus(ctx context.Context, id string) (*PipelineS
 	return &stateCopy, nil
 }
 
-func runLocalShellCommands(ctx context.Context, cmds []string) error {
+func runLocalShellCommands(ctx context.Context, cmds []string, templateContext *pipeline.TemplateContext) error {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
 	}
 
 	for _, cmd := range cmds {
-		out, err := exec.CommandContext(ctx, shell, "-c", cmd).Output()
+		// Render template with context
+		renderedCmd, err := pipeline.RenderTemplate(cmd, templateContext)
+		if err != nil {
+			logging.Logger().Error("failed to render command template", zap.String("command", cmd), zap.Error(err))
+			return fmt.Errorf("failed to render command template: %w", err)
+		}
+
+		out, err := exec.CommandContext(ctx, shell, "-c", renderedCmd).Output()
 		if err != nil {
 			logging.Logger().Error("error running command on the server", zap.String("output", logging.Truncate(string(out))), zap.Error(err))
 			return err
@@ -142,12 +149,18 @@ func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipelin
 
 	pm.updateStatus(id, PipelineStatusRunning, "")
 
+	// Create template context for command rendering
+	templateContext := &pipeline.TemplateContext{
+		PipelineID: id,
+		Timestamp:  time.Now().Unix(),
+	}
+
 	if len(p.PreCommands) > 0 {
 		// Running pipeline server pre commands
 		logging.Logger().Debug("running pre commands on the server", zap.Strings("commands", logging.TruncateSlice(p.PreCommands, 1000)))
 		preCtx, preCancel := context.WithTimeout(ctx, 5*time.Minute) // setting hard timeout for pre commands in 5 minutes
 		defer preCancel()
-		if err := runLocalShellCommands(preCtx, p.PreCommands); err != nil {
+		if err := runLocalShellCommands(preCtx, p.PreCommands, templateContext); err != nil {
 			logging.Logger().Error("error running pre commands on the server")
 			return
 		}
@@ -225,7 +238,7 @@ func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipelin
 		logging.Logger().Debug("running post commands on the server", zap.Strings("commands", logging.TruncateSlice(p.PostCommands, 1000)))
 		postCtx, postCancel := context.WithTimeout(ctx, 5*time.Minute) // setting hard timeout for post commands in 5 minutes
 		defer postCancel()
-		if err := runLocalShellCommands(postCtx, p.PostCommands); err != nil {
+		if err := runLocalShellCommands(postCtx, p.PostCommands, templateContext); err != nil {
 			logging.Logger().Error("error running post commands on the server")
 			return
 		}

@@ -15,8 +15,10 @@ import (
 
 // Pipeline represents the main pipeline configuration.
 type Pipeline struct {
-	Targets []Target `yaml:"targets"`
-	Stages  []Stage  `yaml:"stages"`
+	Targets      []Target `yaml:"targets"`
+	Stages       []Stage  `yaml:"stages"`
+	PreCommands  []string `yaml:"pre_commands"`
+	PostCommands []string `yaml:"post_commands"`
 }
 
 // Target represents a target source for the pipeline.

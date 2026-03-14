@@ -2,6 +2,9 @@
 # This example demonstrates how to configure a pipeline with Nuclei scanner
 
 pipeline:
+  # Executing pre commands on the server before running pipeline on workers 
+  pre_commands: []
+
   targets:
     - value: "example.com"
       type: crtsh
@@ -9,6 +12,7 @@ pipeline:
       type: list
   stages:
     - name: "Run nuclei and collect results"
+      ignore_fail: true
       type: exec
       steps:
         - "docker run --rm -v /opt/recon:/data -v {{.Targets.filepath}}:/data/hosts.txt projectdiscovery/nuclei:latest -severity medium,high,critical -l /data/hosts.txt -json-export /data/nuclei-{{.Worker.Name}}.json"
@@ -21,3 +25,7 @@ pipeline:
     #   type: sync
     #   src: "/opt/recon"
     #   dest: "./results/{{.Worker.Name}}"
+
+  # Executing post commands on the server when all stages completes across workers 
+  post_commands:
+    - "cd ./results/{{.PipelineID}} && find . -name '*.json' -type f -size +2c | xargs cat  | jq > found-{{.PipelineID}}.json"

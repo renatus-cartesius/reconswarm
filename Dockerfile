@@ -24,7 +24,7 @@ WORKDIR /app
 
 # Install runtime dependencies
 # ca-certificates for HTTPS, openssh-client for SSH control
-RUN apk add --no-cache ca-certificates openssh-client
+RUN apk add --no-cache ca-certificates openssh-client curl
 
 # Copy binary from builder
 COPY --from=builder /app/bin/reconswarm /app/reconswarm

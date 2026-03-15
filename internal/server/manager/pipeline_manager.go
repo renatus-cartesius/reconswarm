@@ -91,7 +91,7 @@ func (pm *PipelineManager) SubmitPipeline(ctx context.Context, p pipeline.Pipeli
 	}
 
 	// Start execution in background
-	go pm.runPipeline(ctx, id, p)
+	go pm.runPipeline(id, p)
 
 	return id, nil
 }
@@ -144,7 +144,8 @@ func runLocalShellCommands(ctx context.Context, cmds []string, templateContext *
 	return nil
 }
 
-func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipeline.Pipeline) {
+func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
+	ctx := context.Background() // TODO: fix by passing context from outside
 	logging.Logger().Info("Starting pipeline execution", zap.String("pipeline_id", id))
 
 	pm.updateStatus(id, PipelineStatusRunning, "")
@@ -188,6 +189,7 @@ func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipelin
 
 	// Create worker pool with concurrency limit
 	pool := pond.NewPool(workersCount)
+	infraCtx, infraCancel := context.WithTimeout(context.Background(), 10*time.Minute) // Isolated context for infrastructure operations
 
 	var workersMu sync.Mutex
 	var workers []*Worker
@@ -196,7 +198,7 @@ func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipelin
 	for chunk := range slices.Chunk(targetsList, (len(targetsList)+workersCount-1)/workersCount) {
 		pool.Submit(func() {
 			// Create ephemeral worker
-			worker, err := pm.workerManager.CreateEphemeralWorker(ctx)
+			worker, err := pm.workerManager.CreateEphemeralWorker(infraCtx)
 			if err != nil {
 				logging.Logger().Error("failed to create ephemeral worker", zap.Error(err))
 				return
@@ -209,13 +211,13 @@ func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipelin
 			// Always delete worker after execution
 			defer func() {
 				logging.Logger().Debug("deleting ephemeral worker", zap.String("name", worker.Name))
-				if err := pm.workerManager.DeleteEphemeralWorker(ctx, worker); err != nil {
+				if err := pm.workerManager.DeleteEphemeralWorker(infraCtx, worker); err != nil {
 					logging.Logger().Error("failed to delete ephemeral worker", zap.Error(err))
 				}
 			}()
 
 			// Execute pipeline on worker
-			if err := pipeline.ExecuteOnWorker(ctx, worker.Controller, p, chunk, id); err != nil {
+			if err := pipeline.ExecuteOnWorker(infraCtx, worker.Controller, p, chunk, id); err != nil {
 				logging.Logger().Error("pipeline execution failed on worker",
 					zap.String("worker_name", worker.Name),
 					zap.Error(err))
@@ -232,6 +234,7 @@ func (pm *PipelineManager) runPipeline(ctx context.Context, id string, p pipelin
 	pm.updateStatus(id, PipelineStatusCompleted, "")
 
 	pool.StopAndWait()
+	infraCancel() // Clean up infrastructure context
 
 	if len(p.PostCommands) > 0 {
 		// Running pipeline server post commands

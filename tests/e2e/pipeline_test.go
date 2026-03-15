@@ -711,4 +711,71 @@ stages:
 			Expect(totalSyncCalls).To(Equal(2))
 		})
 	})
+
+	Context("Pre and Post Commands", func() {
+		It("should preserve pre_commands and post_commands in pipeline state", func() {
+			// Create pipeline with pre and post commands
+			pipelineYAML := `
+name: pre-post-commands-test
+targets:
+  - type: list
+    value:
+      - target.example.com
+pre_commands:
+  - echo "Starting pipeline"
+  - export CUSTOM_VAR=value
+stages:
+  - name: scan
+    type: exec
+    steps:
+      - echo "Running scan"
+post_commands:
+  - echo "Cleaning up"
+  - rm -f /tmp/workspace/*
+`
+			id, err := pipelineManager.SubmitPipeline(ctx, parsePipelineYAML(pipelineYAML))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(id).NotTo(BeEmpty())
+
+			// Wait for completion
+			Eventually(func() manager.PipelineStatus {
+				status, err := pipelineManager.GetStatus(ctx, id)
+				if err != nil {
+					return manager.PipelineStatusFailed
+				}
+				return status.Status
+			}, 30*time.Second, 1*time.Second).Should(Equal(manager.PipelineStatusCompleted))
+
+			// Verify pipeline state is preserved with pre/post commands
+			var savedState manager.PipelineState
+			err = stateManager.GetPipeline(ctx, id, &savedState)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Check that the pipeline definition is preserved
+			jsonData, err := json.Marshal(savedState.Pipeline)
+			Expect(err).NotTo(HaveOccurred())
+
+			var pipelineJSON map[string]interface{}
+			err = json.Unmarshal(jsonData, &pipelineJSON)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify preCommands exist and match expected values
+			preCommands, exists := pipelineJSON["preCommands"]
+			Expect(exists).To(BeTrue(), "preCommands should be preserved in pipeline state")
+			preCommandsSlice, ok := preCommands.([]interface{})
+			Expect(ok).To(BeTrue(), "preCommands should be an array")
+			Expect(len(preCommandsSlice)).To(Equal(2))
+			Expect(preCommandsSlice[0]).To(Equal("echo \"Starting pipeline\""))
+			Expect(preCommandsSlice[1]).To(Equal("export CUSTOM_VAR=value"))
+
+			// Verify postCommands exist and match expected values
+			postCommands, exists := pipelineJSON["postCommands"]
+			Expect(exists).To(BeTrue(), "postCommands should be preserved in pipeline state")
+			postCommandsSlice, ok := postCommands.([]interface{})
+			Expect(ok).To(BeTrue(), "postCommands should be an array")
+			Expect(len(postCommandsSlice)).To(Equal(2))
+			Expect(postCommandsSlice[0]).To(Equal("echo \"Cleaning up\""))
+			Expect(postCommandsSlice[1]).To(Equal("rm -f /tmp/workspace/*"))
+		})
+	})
 })

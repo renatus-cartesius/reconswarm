@@ -293,4 +293,118 @@ var _ = Describe("gRPC Server", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Context("Pipeline with Pre and Post Commands", func() {
+		It("should successfully submit pipeline with pre_commands and post_commands", func() {
+			req := &api.RunPipelineRequest{
+				Pipeline: &api.Pipeline{
+					Targets: []*api.Target{
+						{Type: "list", ListValue: []string{"target.example.com"}},
+					},
+					Stages: []*api.Stage{
+						{
+							Name: "scan-stage",
+							Config: &api.Stage_Exec{
+								Exec: &api.ExecStage{Steps: []string{"echo 'Running scan'"}},
+							},
+						},
+					},
+					PreCommands: []string{
+						"echo 'Starting pipeline'",
+						"export CUSTOM_VAR=test",
+					},
+					PostCommands: []string{
+						"echo 'Cleaning up'",
+						"rm -f /tmp/*",
+					},
+				},
+			}
+
+			resp, err := client.RunPipeline(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.PipelineId).NotTo(BeEmpty())
+
+			// Get the pipeline back and verify the commands are preserved
+			statusResp, err := client.GetPipeline(ctx, &api.GetPipelineRequest{PipelineId: resp.PipelineId})
+			Expect(err).NotTo(HaveOccurred())
+
+			// The pipeline definition should be preserved in the response
+			// Note: We can't directly access the pipeline fields from GetPipelineResponse
+			// but we can verify the pipeline ID and status are returned correctly
+			Expect(statusResp.PipelineId).To(Equal(resp.PipelineId))
+			Expect(statusResp.Status).To(Or(Equal("Pending"), Equal("Running"), Equal("Completed")))
+		})
+
+		It("should handle pipeline with empty pre_commands and post_commands", func() {
+			req := &api.RunPipelineRequest{
+				Pipeline: &api.Pipeline{
+					Targets: []*api.Target{
+						{Type: "list", ListValue: []string{"localhost"}},
+					},
+					Stages: []*api.Stage{
+						{
+							Name: "test-stage",
+							Config: &api.Stage_Exec{
+								Exec: &api.ExecStage{Steps: []string{"echo test"}},
+							},
+						},
+					},
+					PreCommands:  []string{},
+					PostCommands: []string{},
+				},
+			}
+
+			resp, err := client.RunPipeline(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.PipelineId).NotTo(BeEmpty())
+		})
+
+		It("should handle pipeline with only pre_commands", func() {
+			req := &api.RunPipelineRequest{
+				Pipeline: &api.Pipeline{
+					Targets: []*api.Target{
+						{Type: "list", ListValue: []string{"localhost"}},
+					},
+					Stages: []*api.Stage{
+						{
+							Name: "test-stage",
+							Config: &api.Stage_Exec{
+								Exec: &api.ExecStage{Steps: []string{"echo test"}},
+							},
+						},
+					},
+					PreCommands:  []string{"echo 'pre'"},
+					PostCommands: []string{},
+				},
+			}
+
+			resp, err := client.RunPipeline(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.PipelineId).NotTo(BeEmpty())
+		})
+
+		It("should handle pipeline with only post_commands", func() {
+			req := &api.RunPipelineRequest{
+				Pipeline: &api.Pipeline{
+					Targets: []*api.Target{
+						{Type: "list", ListValue: []string{"localhost"}},
+					},
+					Stages: []*api.Stage{
+						{
+							Name: "test-stage",
+							Config: &api.Stage_Exec{
+								Exec: &api.ExecStage{Steps: []string{"echo test"}},
+							},
+						},
+					},
+					PreCommands:  []string{},
+					PostCommands: []string{"echo 'post'"},
+				},
+			}
+
+			resp, err := client.RunPipeline(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.PipelineId).NotTo(BeEmpty())
+		})
+	})
 })

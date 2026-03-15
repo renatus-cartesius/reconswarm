@@ -27,6 +27,8 @@ type Pipeline struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Targets       []*Target              `protobuf:"bytes,1,rep,name=targets,proto3" json:"targets,omitempty"`
 	Stages        []*Stage               `protobuf:"bytes,2,rep,name=stages,proto3" json:"stages,omitempty"`
+	PreCommands   []string               `protobuf:"bytes,3,rep,name=pre_commands,json=preCommands,proto3" json:"pre_commands,omitempty"`
+	PostCommands  []string               `protobuf:"bytes,4,rep,name=post_commands,json=postCommands,proto3" json:"post_commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -71,6 +73,20 @@ func (x *Pipeline) GetTargets() []*Target {
 func (x *Pipeline) GetStages() []*Stage {
 	if x != nil {
 		return x.Stages
+	}
+	return nil
+}
+
+func (x *Pipeline) GetPreCommands() []string {
+	if x != nil {
+		return x.PreCommands
+	}
+	return nil
+}
+
+func (x *Pipeline) GetPostCommands() []string {
+	if x != nil {
+		return x.PostCommands
 	}
 	return nil
 }
@@ -711,10 +727,12 @@ var File_api_reconswarm_proto protoreflect.FileDescriptor
 const file_api_reconswarm_proto_rawDesc = "" +
 	"\n" +
 	"\x14api/reconswarm.proto\x12\n" +
-	"reconswarm\"c\n" +
+	"reconswarm\"\xab\x01\n" +
 	"\bPipeline\x12,\n" +
 	"\atargets\x18\x01 \x03(\v2\x12.reconswarm.TargetR\atargets\x12)\n" +
-	"\x06stages\x18\x02 \x03(\v2\x11.reconswarm.StageR\x06stages\"^\n" +
+	"\x06stages\x18\x02 \x03(\v2\x11.reconswarm.StageR\x06stages\x12!\n" +
+	"\fpre_commands\x18\x03 \x03(\tR\vpreCommands\x12#\n" +
+	"\rpost_commands\x18\x04 \x03(\tR\fpostCommands\"^\n" +
 	"\x06Target\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12!\n" +
 	"\fstring_value\x18\x02 \x01(\tR\vstringValue\x12\x1d\n" +

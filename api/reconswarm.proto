@@ -17,6 +17,8 @@ service ReconSwarm {
 message Pipeline {
   repeated Target targets = 1;
   repeated Stage stages = 2;
+  repeated string pre_commands = 3;
+  repeated string post_commands = 4;
 }
 
 // Target defines a source of targets for the pipeline.

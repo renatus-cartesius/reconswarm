@@ -99,9 +99,17 @@ func convertTargetToProto(target pipeline.Target) *api.Target {
 
 	// Automatic type handling without explicit switch statement
 	if target.Value != nil {
-		jsonBytes, _ := json.Marshal(target.Value)
+		jsonBytes, err := json.Marshal(target.Value)
+		if err != nil {
+			logging.Logger().Error("Failed to marshal target value", zap.Error(err))
+			return pt
+		}
+
 		var valueMap map[string]interface{}
-		json.Unmarshal(jsonBytes, &valueMap)
+		if err := json.Unmarshal(jsonBytes, &valueMap); err != nil {
+			logging.Logger().Error("Failed to unmarshal target value", zap.Error(err))
+			return pt
+		}
 
 		// Automatically handle string and list values
 		if strVal, ok := valueMap["string_value"].(string); ok {

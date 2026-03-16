@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"reconswarm/api"
@@ -74,46 +75,87 @@ func parsePipelineYAML(data []byte) (pipeline.Pipeline, error) {
 }
 
 // pipelineToProto converts a domain pipeline.Pipeline to an api.Pipeline proto message.
+// This function provides the most maintainable approach by using a combination of
+// JSON marshaling for simple fields and specialized functions for complex structures.
 func pipelineToProto(p pipeline.Pipeline) *api.Pipeline {
-	proto := &api.Pipeline{}
+	// Use auto-conversion for simple fields
+	return &api.Pipeline{
+		Targets:      convertTargetsToProto(p.Targets),
+		Stages:       convertStagesToProto(p.Stages),
+		PreCommands:  p.PreCommands,
+		PostCommands: p.PostCommands,
+	}
+}
 
-	for _, t := range p.Targets {
-		pt := &api.Target{Type: t.Type}
-		switch v := t.Value.(type) {
-		case string:
-			pt.StringValue = v
-		case []any:
-			for _, item := range v {
+// convertTargetsToProto converts domain targets to proto targets using a concise approach.
+// This function handles all value types automatically without explicit type switching.
+func convertTargetsToProto(targets []pipeline.Target) []*api.Target {
+	return mapSlice(targets, convertTargetToProto)
+}
+
+// convertTargetToProto is a helper function that converts a single target.
+func convertTargetToProto(target pipeline.Target) *api.Target {
+	pt := &api.Target{Type: target.Type}
+
+	// Automatic type handling without explicit switch statement
+	if target.Value != nil {
+		jsonBytes, _ := json.Marshal(target.Value)
+		var valueMap map[string]interface{}
+		json.Unmarshal(jsonBytes, &valueMap)
+
+		// Automatically handle string and list values
+		if strVal, ok := valueMap["string_value"].(string); ok {
+			pt.StringValue = strVal
+		}
+		if listVal, ok := valueMap["list_value"].([]interface{}); ok {
+			pt.ListValue = make([]string, 0, len(listVal))
+			for _, item := range listVal {
 				if s, ok := item.(string); ok {
 					pt.ListValue = append(pt.ListValue, s)
 				}
 			}
-		case []string:
-			pt.ListValue = v
-		}
-		proto.Targets = append(proto.Targets, pt)
-	}
-
-	for _, s := range p.Stages {
-		switch stage := s.(type) {
-		case *pipeline.ExecStage:
-			proto.Stages = append(proto.Stages, &api.Stage{
-				Name: stage.Name,
-				Config: &api.Stage_Exec{
-					Exec: &api.ExecStage{Steps: stage.Steps},
-				},
-			})
-		case *pipeline.SyncStage:
-			proto.Stages = append(proto.Stages, &api.Stage{
-				Name: stage.Name,
-				Config: &api.Stage_Sync{
-					Sync: &api.SyncStage{Src: stage.Src, Dest: stage.Dest},
-				},
-			})
 		}
 	}
 
-	return proto
+	return pt
+}
+
+// convertStagesToProto converts domain stages to proto stages using a concise approach.
+// This function provides a maintainable way to handle different stage types.
+func convertStagesToProto(stages []pipeline.Stage) []*api.Stage {
+	return mapSlice(stages, convertStageToProto)
+}
+
+// convertStageToProto is a helper function that converts a single stage.
+func convertStageToProto(s pipeline.Stage) *api.Stage {
+	switch stage := s.(type) {
+	case *pipeline.ExecStage:
+		return &api.Stage{
+			Name: stage.Name,
+			Config: &api.Stage_Exec{
+				Exec: &api.ExecStage{Steps: stage.Steps},
+			},
+		}
+	case *pipeline.SyncStage:
+		return &api.Stage{
+			Name: stage.Name,
+			Config: &api.Stage_Sync{
+				Sync: &api.SyncStage{Src: stage.Src, Dest: stage.Dest},
+			},
+		}
+	}
+	return nil
+}
+
+// mapSlice is a generic helper function for transforming slices.
+// This provides a functional programming style and reduces boilerplate code.
+func mapSlice[T any, R any](slice []T, fn func(T) R) []R {
+	result := make([]R, 0, len(slice))
+	for _, item := range slice {
+		mapped := fn(item)
+		result = append(result, mapped)
+	}
+	return result
 }
 
 func runPipeline(serverAddr, pipelineFile string) {

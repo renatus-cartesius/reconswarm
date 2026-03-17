@@ -38,6 +38,8 @@ type PipelineState struct {
 	EndTime         time.Time
 	Pipeline        *pipeline.Pipeline
 	Workers         []*Worker
+	PreCommands     []string
+	PostCommands    []string
 }
 
 // PipelineManager manages pipeline execution
@@ -74,11 +76,13 @@ func (pm *PipelineManager) SubmitPipeline(ctx context.Context, p pipeline.Pipeli
 	id := fmt.Sprintf("pipe-%s", uuid.NewString())
 
 	state := &PipelineState{
-		ID:          id,
-		Status:      PipelineStatusPending,
-		TotalStages: len(p.Stages),
-		StartTime:   time.Now(),
-		Pipeline:    &p,
+		ID:           id,
+		Status:       PipelineStatusPending,
+		TotalStages:  len(p.Stages),
+		StartTime:    time.Now(),
+		Pipeline:     &p,
+		PreCommands:  p.PreCommands,
+		PostCommands: p.PostCommands,
 	}
 
 	pm.mu.Lock()

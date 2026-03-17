@@ -15,10 +15,10 @@ import (
 
 // Pipeline represents the main pipeline configuration.
 type Pipeline struct {
-	Targets      []Target `yaml:"targets"`
-	Stages       []Stage  `yaml:"stages"`
-	PreCommands  []string `yaml:"pre_commands"`
-	PostCommands []string `yaml:"post_commands"`
+	Targets      []Target `yaml:"targets" json:"targets"`
+	Stages       []Stage  `yaml:"stages" json:"stages"`
+	PreCommands  []string `yaml:"pre_commands" json:"preCommands"`
+	PostCommands []string `yaml:"post_commands" json:"postCommands"`
 }
 
 // Target represents a target source for the pipeline.
@@ -39,8 +39,10 @@ type Stage interface {
 func (p *Pipeline) UnmarshalYAML(node *yaml.Node) error {
 	// Interim structure to decode targets and raw stages
 	var raw struct {
-		Targets []Target    `yaml:"targets"`
-		Stages  []yaml.Node `yaml:"stages"`
+		Targets      []Target    `yaml:"targets"`
+		Stages       []yaml.Node `yaml:"stages"`
+		PreCommands  []string    `yaml:"pre_commands"`
+		PostCommands []string    `yaml:"post_commands"`
 	}
 
 	if err := node.Decode(&raw); err != nil {
@@ -49,6 +51,8 @@ func (p *Pipeline) UnmarshalYAML(node *yaml.Node) error {
 
 	p.Targets = raw.Targets
 	p.Stages = make([]Stage, 0, len(raw.Stages))
+	p.PreCommands = raw.PreCommands
+	p.PostCommands = raw.PostCommands
 
 	for _, stageNode := range raw.Stages {
 		// Interim structure to determine stage type
@@ -113,11 +117,15 @@ func (p Pipeline) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(struct {
-		Targets []Target   `json:"targets"`
-		Stages  []rawStage `json:"stages"`
+		Targets      []Target   `json:"targets"`
+		Stages       []rawStage `json:"stages"`
+		PreCommands  []string   `json:"preCommands"`
+		PostCommands []string   `json:"postCommands"`
 	}{
-		Targets: p.Targets,
-		Stages:  stages,
+		Targets:      p.Targets,
+		Stages:       stages,
+		PreCommands:  p.PreCommands,
+		PostCommands: p.PostCommands,
 	})
 }
 
@@ -125,8 +133,10 @@ func (p Pipeline) MarshalJSON() ([]byte, error) {
 // Deserializes Stage interface slice using the "type" field as discriminator.
 func (p *Pipeline) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Targets []Target          `json:"targets"`
-		Stages  []json.RawMessage `json:"stages"`
+		Targets      []Target          `json:"targets"`
+		Stages       []json.RawMessage `json:"stages"`
+		PreCommands  []string          `json:"preCommands"`
+		PostCommands []string          `json:"postCommands"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -134,6 +144,8 @@ func (p *Pipeline) UnmarshalJSON(data []byte) error {
 	}
 
 	p.Targets = raw.Targets
+	p.PreCommands = raw.PreCommands
+	p.PostCommands = raw.PostCommands
 	p.Stages = make([]Stage, 0, len(raw.Stages))
 
 	for _, stageData := range raw.Stages {

@@ -75,45 +75,79 @@ func parsePipelineYAML(data []byte) (pipeline.Pipeline, error) {
 
 // pipelineToProto converts a domain pipeline.Pipeline to an api.Pipeline proto message.
 func pipelineToProto(p pipeline.Pipeline) *api.Pipeline {
-	proto := &api.Pipeline{}
+	return &api.Pipeline{
+		Targets:      convertTargetsToProto(p.Targets),
+		Stages:       convertStagesToProto(p.Stages),
+		PreCommands:  p.PreCommands,
+		PostCommands: p.PostCommands,
+	}
+}
 
-	for _, t := range p.Targets {
-		pt := &api.Target{Type: t.Type}
-		switch v := t.Value.(type) {
+// convertTargetsToProto converts domain targets to proto targets.
+func convertTargetsToProto(targets []pipeline.Target) []*api.Target {
+	return mapSlice(targets, convertTargetToProto)
+}
+
+// convertTargetToProto is a helper function that converts a single target.
+func convertTargetToProto(target pipeline.Target) *api.Target {
+	pt := &api.Target{Type: target.Type}
+
+	// Handle target value directly based on its type
+	if target.Value != nil {
+		switch v := target.Value.(type) {
 		case string:
 			pt.StringValue = v
-		case []any:
+		case []string:
+			pt.ListValue = v
+		case []interface{}:
+			pt.ListValue = make([]string, 0, len(v))
 			for _, item := range v {
 				if s, ok := item.(string); ok {
 					pt.ListValue = append(pt.ListValue, s)
 				}
 			}
-		case []string:
-			pt.ListValue = v
-		}
-		proto.Targets = append(proto.Targets, pt)
-	}
-
-	for _, s := range p.Stages {
-		switch stage := s.(type) {
-		case *pipeline.ExecStage:
-			proto.Stages = append(proto.Stages, &api.Stage{
-				Name: stage.Name,
-				Config: &api.Stage_Exec{
-					Exec: &api.ExecStage{Steps: stage.Steps},
-				},
-			})
-		case *pipeline.SyncStage:
-			proto.Stages = append(proto.Stages, &api.Stage{
-				Name: stage.Name,
-				Config: &api.Stage_Sync{
-					Sync: &api.SyncStage{Src: stage.Src, Dest: stage.Dest},
-				},
-			})
+		default:
+			logging.Logger().Warn("Unsupported target value type", zap.String("type", fmt.Sprintf("%T", v)))
 		}
 	}
 
-	return proto
+	return pt
+}
+
+// convertStagesToProto converts domain stages to proto stages.
+func convertStagesToProto(stages []pipeline.Stage) []*api.Stage {
+	return mapSlice(stages, convertStageToProto)
+}
+
+// convertStageToProto is a helper function that converts a single stage.
+func convertStageToProto(s pipeline.Stage) *api.Stage {
+	switch stage := s.(type) {
+	case *pipeline.ExecStage:
+		return &api.Stage{
+			Name: stage.Name,
+			Config: &api.Stage_Exec{
+				Exec: &api.ExecStage{Steps: stage.Steps},
+			},
+		}
+	case *pipeline.SyncStage:
+		return &api.Stage{
+			Name: stage.Name,
+			Config: &api.Stage_Sync{
+				Sync: &api.SyncStage{Src: stage.Src, Dest: stage.Dest},
+			},
+		}
+	}
+	return nil
+}
+
+// mapSlice is a generic helper function for transforming slices.
+func mapSlice[T any, R any](slice []T, fn func(T) R) []R {
+	result := make([]R, 0, len(slice))
+	for _, item := range slice {
+		mapped := fn(item)
+		result = append(result, mapped)
+	}
+	return result
 }
 
 func runPipeline(serverAddr, pipelineFile string) {

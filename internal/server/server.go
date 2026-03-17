@@ -74,7 +74,10 @@ func (s *Server) RunPipeline(ctx context.Context, req *api.RunPipelineRequest) (
 
 	logging.Logger().Info("RunPipeline RPC called",
 		zap.Int("targets", len(req.Pipeline.Targets)),
-		zap.Int("stages", len(req.Pipeline.Stages)))
+		zap.Int("stages", len(req.Pipeline.Stages)),
+		zap.Strings("pre_commands", req.Pipeline.PreCommands),
+		zap.Strings("post_commands", req.Pipeline.PostCommands),
+	)
 
 	// Convert proto Pipeline to domain Pipeline
 	p := protoToPipeline(req.Pipeline)
@@ -126,7 +129,7 @@ func (s *Server) Start() error {
 	return s.StartOnPort(s.config.Server.Port)
 }
 
-func (s *Server) ListPipelines(ctx context.Context, req *api.ListPipelinesRequest) (*api.ListPipelinesResponse, error){
+func (s *Server) ListPipelines(ctx context.Context, req *api.ListPipelinesRequest) (*api.ListPipelinesResponse, error) {
 	return nil, nil
 }
 
@@ -182,6 +185,9 @@ func protoToPipeline(p *api.Pipeline) pipeline.Pipeline {
 			})
 		}
 	}
+
+	pip.PreCommands = p.PreCommands
+	pip.PostCommands = p.PostCommands
 
 	return pip
 }

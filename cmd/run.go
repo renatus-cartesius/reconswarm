@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"reconswarm/api"
@@ -75,10 +74,7 @@ func parsePipelineYAML(data []byte) (pipeline.Pipeline, error) {
 }
 
 // pipelineToProto converts a domain pipeline.Pipeline to an api.Pipeline proto message.
-// This function provides the most maintainable approach by using a combination of
-// JSON marshaling for simple fields and specialized functions for complex structures.
 func pipelineToProto(p pipeline.Pipeline) *api.Pipeline {
-	// Use auto-conversion for simple fields
 	return &api.Pipeline{
 		Targets:      convertTargetsToProto(p.Targets),
 		Stages:       convertStagesToProto(p.Stages),
@@ -87,8 +83,7 @@ func pipelineToProto(p pipeline.Pipeline) *api.Pipeline {
 	}
 }
 
-// convertTargetsToProto converts domain targets to proto targets using a concise approach.
-// This function handles all value types automatically without explicit type switching.
+// convertTargetsToProto converts domain targets to proto targets.
 func convertTargetsToProto(targets []pipeline.Target) []*api.Target {
 	return mapSlice(targets, convertTargetToProto)
 }
@@ -97,39 +92,29 @@ func convertTargetsToProto(targets []pipeline.Target) []*api.Target {
 func convertTargetToProto(target pipeline.Target) *api.Target {
 	pt := &api.Target{Type: target.Type}
 
-	// Automatic type handling without explicit switch statement
+	// Handle target value directly based on its type
 	if target.Value != nil {
-		jsonBytes, err := json.Marshal(target.Value)
-		if err != nil {
-			logging.Logger().Error("Failed to marshal target value", zap.Error(err))
-			return pt
-		}
-
-		var valueMap map[string]interface{}
-		if err := json.Unmarshal(jsonBytes, &valueMap); err != nil {
-			logging.Logger().Error("Failed to unmarshal target value", zap.Error(err))
-			return pt
-		}
-
-		// Automatically handle string and list values
-		if strVal, ok := valueMap["string_value"].(string); ok {
-			pt.StringValue = strVal
-		}
-		if listVal, ok := valueMap["list_value"].([]interface{}); ok {
-			pt.ListValue = make([]string, 0, len(listVal))
-			for _, item := range listVal {
+		switch v := target.Value.(type) {
+		case string:
+			pt.StringValue = v
+		case []string:
+			pt.ListValue = v
+		case []interface{}:
+			pt.ListValue = make([]string, 0, len(v))
+			for _, item := range v {
 				if s, ok := item.(string); ok {
 					pt.ListValue = append(pt.ListValue, s)
 				}
 			}
+		default:
+			logging.Logger().Warn("Unsupported target value type", zap.String("type", fmt.Sprintf("%T", v)))
 		}
 	}
 
 	return pt
 }
 
-// convertStagesToProto converts domain stages to proto stages using a concise approach.
-// This function provides a maintainable way to handle different stage types.
+// convertStagesToProto converts domain stages to proto stages.
 func convertStagesToProto(stages []pipeline.Stage) []*api.Stage {
 	return mapSlice(stages, convertStageToProto)
 }
@@ -156,7 +141,6 @@ func convertStageToProto(s pipeline.Stage) *api.Stage {
 }
 
 // mapSlice is a generic helper function for transforming slices.
-// This provides a functional programming style and reduces boilerplate code.
 func mapSlice[T any, R any](slice []T, fn func(T) R) []R {
 	result := make([]R, 0, len(slice))
 	for _, item := range slice {

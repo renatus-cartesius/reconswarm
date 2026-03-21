@@ -193,7 +193,8 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 
 	// Create worker pool with concurrency limit
 	pool := pond.NewPool(workersCount)
-	infraCtx, infraCancel := context.WithTimeout(context.Background(), 10*time.Minute) // Isolated context for infrastructure operations
+	infraCtx, infraCancel := context.WithCancel(context.Background()) // Isolated context for infrastructure operations
+	defer infraCancel()
 
 	var workersMu sync.Mutex
 	var workers []*Worker
@@ -215,7 +216,10 @@ func (pm *PipelineManager) runPipeline(id string, p pipeline.Pipeline) {
 			// Always delete worker after execution
 			defer func() {
 				logging.Logger().Debug("deleting ephemeral worker", zap.String("name", worker.Name))
-				if err := pm.workerManager.DeleteEphemeralWorker(infraCtx, worker); err != nil {
+				// Use background context for cleanup to avoid timeout issues
+				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				defer cleanupCancel()
+				if err := pm.workerManager.DeleteEphemeralWorker(cleanupCtx, worker); err != nil {
 					logging.Logger().Error("failed to delete ephemeral worker", zap.Error(err))
 				}
 			}()
